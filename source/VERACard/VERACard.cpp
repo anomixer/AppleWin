@@ -36,8 +36,8 @@ VERACard::VERACard(UINT slot)
 	, m_lastVideoUpdateCycle(0)
 	, m_lastFrameCycles(0)
 	, m_lastSoundUpdateCycle(0)
-	, m_byteOffset(0)
-	, m_numSamplesError(0)
+	, m_byteOffset((uint32_t)-1)
+	, m_sampleAccum(0)
 	, m_bFrameCleared(false)
 {
 	if (m_slot == SLOT0)
@@ -77,8 +77,8 @@ void VERACard::Reset(const bool powerCycle)
 	m_lastVideoUpdateCycle = 0;
 	m_lastFrameCycles = 0;
 	m_lastSoundUpdateCycle = 0;
-	m_byteOffset = 0;
-	m_numSamplesError = 0;
+	m_byteOffset = (uint32_t)-1;
+	m_sampleAccum = 0;
 	m_bFrameCleared = false;
 }
 
@@ -221,8 +221,8 @@ void VERACard::InitAudio()
 	}
 
 	DSZeroVoiceBuffer(&m_veraVoice, kDSBufferByteSize);
-	m_byteOffset = 0;
-	m_numSamplesError = 0;
+	m_byteOffset = (uint32_t)-1;
+	m_sampleAccum = 0;
 }
 
 void VERACard::UpdateSound()
@@ -241,41 +241,51 @@ void VERACard::UpdateSound()
 		return;
 	}
 
-	const double updateInterval = (double)(g_nCumulativeCycles - m_lastSoundUpdateCycle);
+	double updateInterval = (double)(g_nCumulativeCycles - m_lastSoundUpdateCycle);
 	if (updateInterval < kMinUpdateIntervalCycles)
 		return;
 	m_lastSoundUpdateCycle = g_nCumulativeCycles;
 
-	// Convert cycles to sample count.
-	const double nIrqFreq = g_fCurrentCLK6502 / updateInterval + 0.5;	// round-up
-	int nNumSamples = (int)((double)kSampleRate / nIrqFreq) + m_numSamplesError;
-	if (nNumSamples <= 0)
-		nNumSamples = 0;
-	const UINT kMaxSamples = kDSBufferByteSize / (sizeof(short) * kNumChannels);	// frames of stereo
-	if (nNumSamples > (int)kMaxSamples)
-		nNumSamples = (int)kMaxSamples;
+	// Cap the interval (e.g. after a debugger/pause) so we never try to write
+	// more than the ring buffer can hold.
+	const double kMaximumUpdateInterval = (double)(0xFFFF + 2);
+	if (updateInterval > kMaximumUpdateInterval)
+		updateInterval = kMaximumUpdateInterval;
 
-	if (nNumSamples == 0)
-	{
-		if (m_numSamplesError)
-			m_byteOffset = 0;
-		return;
-	}
-
-	// Generate the samples from the VERA audio core.
-	m_audio.Render(m_mixBuffer.data(), nNumSamples);
-
-	// Write into the ring buffer.
+	// Read the ring-buffer position (used for the initial write-offset alignment).
 	DWORD dwCurrentPlayCursor, dwCurrentWriteCursor;
 	HRESULT hr = m_veraVoice.lpDSBvoice->GetCurrentPosition(&dwCurrentPlayCursor, &dwCurrentWriteCursor);
 	if (FAILED(hr))
 		return;
 
-	if (m_byteOffset == 0)
-		m_byteOffset = dwCurrentWriteCursor;
+	if (m_byteOffset == (uint32_t)-1)
+	{
+		// First call: place the write offset ahead of the play cursor by ~1/3 of
+		// the buffer. This builds a comfortable lead so the play cursor never
+		// catches up (no underrun), without any aggressive feedback loop.
+		m_byteOffset = (dwCurrentPlayCursor + (uint32_t)kDSBufferByteSize / 3) % kDSBufferByteSize;
+	}
 
 	if (SoundCore_ValidateAndAlignWriteOffset(m_byteOffset, dwCurrentPlayCursor, dwCurrentWriteCursor))
-		m_numSamplesError = 0;
+		m_sampleAccum = 0;	// re-aligned; restart the accumulator cleanly
+
+	// Exact sample count via fractional accumulation. Writing precisely the
+	// samples due since the last update (sub-sample accurate) keeps the ring
+	// buffer perfectly balanced — no drift, no under/overflow, no sandy artifacts.
+	m_sampleAccum += updateInterval * (double)kSampleRate / g_fCurrentCLK6502;
+	int nNumSamples = (int)m_sampleAccum;
+	m_sampleAccum -= nNumSamples;
+
+	// Pause protection: never write more than the whole ring buffer.
+	const int kMaxSamples = (int)(kDSBufferByteSize / (sizeof(short) * kNumChannels));
+	if (nNumSamples > kMaxSamples)
+		nNumSamples = kMaxSamples;
+
+	if (nNumSamples == 0)
+		return;
+
+	// Generate the samples from the VERA audio core.
+	m_audio.Render(m_mixBuffer.data(), nNumSamples);
 
 	short* pLocked0;
 	short* pLocked1;

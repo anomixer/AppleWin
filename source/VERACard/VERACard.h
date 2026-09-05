@@ -63,7 +63,7 @@ private:
 	uint64_t m_lastFrameCycles;	// cumulative cycle count when the last full VERA frame was advanced
 	uint64_t m_lastSoundUpdateCycle;
 	uint32_t m_byteOffset;
-	int m_numSamplesError;
+	double m_sampleAccum;	// fractional sample accumulator (exact sample gen)
 	bool m_bFrameCleared;
 	std::vector<short> m_mixBuffer;
 

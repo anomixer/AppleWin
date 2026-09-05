@@ -182,13 +182,15 @@ void VERAAudio::renderSample(int16_t* outL, int16_t* outR)
 	int32_t l = 0;
 	int32_t r = 0;
 
+	// Advance the shared noise LFSR ONCE per output sample. The noise generator
+	// is clocked at the PSG/sample rate, not once per channel — clocking it
+	// 16x per sample made the noise far too fast (a hiss that sounded like sand).
+	m_noiseState = (m_noiseState << 1) |
+		((((m_noiseState >> 1) ^ (m_noiseState >> 2) ^ (m_noiseState >> 4) ^ (m_noiseState >> 15)) & 1));
+	m_noiseState &= 0xffff;
+
 	for (int i = 0; i < NUM_CHANNELS; i++)
 	{
-		// LFSR noise update
-		m_noiseState = (m_noiseState << 1) |
-			((((m_noiseState >> 1) ^ (m_noiseState >> 2) ^ (m_noiseState >> 4) ^ (m_noiseState >> 15)) & 1));
-		m_noiseState &= 0xffff;
-
 		Channel& ch = m_channels[i];
 		const uint32_t oldPhase = static_cast<uint32_t>(ch.phase);
 		double newPhase = 0;

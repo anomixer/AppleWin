@@ -35,8 +35,8 @@ VERACard::VERACard(UINT slot)
 	: Card(CT_VERA, slot)
 	, m_lastVideoUpdateCycle(0)
 	, m_lastFrameCycles(0)
-	, m_lastSoundUpdateCycle(0)
 	, m_byteOffset((uint32_t)-1)
+	, m_lastPlayCursor((uint32_t)-1)
 	, m_sampleAccum(0)
 	, m_bFrameCleared(false)
 {
@@ -76,8 +76,8 @@ void VERACard::Reset(const bool powerCycle)
 
 	m_lastVideoUpdateCycle = 0;
 	m_lastFrameCycles = 0;
-	m_lastSoundUpdateCycle = 0;
 	m_byteOffset = (uint32_t)-1;
+	m_lastPlayCursor = (uint32_t)-1;
 	m_sampleAccum = 0;
 	m_bFrameCleared = false;
 }
@@ -222,6 +222,7 @@ void VERACard::InitAudio()
 
 	DSZeroVoiceBuffer(&m_veraVoice, kDSBufferByteSize);
 	m_byteOffset = (uint32_t)-1;
+	m_lastPlayCursor = (uint32_t)-1;
 	m_sampleAccum = 0;
 }
 
@@ -234,45 +235,35 @@ void VERACard::UpdateSound()
 			return;	// audio not available yet
 	}
 
-	// Generate samples based on elapsed cycles.
-	if (m_lastSoundUpdateCycle == 0)
-	{
-		m_lastSoundUpdateCycle = g_nCumulativeCycles;
-		return;
-	}
-
-	double updateInterval = (double)(g_nCumulativeCycles - m_lastSoundUpdateCycle);
-	if (updateInterval < kMinUpdateIntervalCycles)
-		return;
-	m_lastSoundUpdateCycle = g_nCumulativeCycles;
-
-	// Cap the interval (e.g. after a debugger/pause) so we never try to write
-	// more than the ring buffer can hold.
-	const double kMaximumUpdateInterval = (double)(0xFFFF + 2);
-	if (updateInterval > kMaximumUpdateInterval)
-		updateInterval = kMaximumUpdateInterval;
-
-	// Read the ring-buffer position (used for the initial write-offset alignment).
+	// Drive sample generation directly from the DS play cursor so the audio is
+	// synchronised to real-time playback. Generating from the emulated CPU clock
+	// (g_nCumulativeCycles) drifted from the DS hardware clock by a fraction of a
+	// percent, which produced a periodic under/overflow glitch every ~14 s.
 	DWORD dwCurrentPlayCursor, dwCurrentWriteCursor;
 	HRESULT hr = m_veraVoice.lpDSBvoice->GetCurrentPosition(&dwCurrentPlayCursor, &dwCurrentWriteCursor);
 	if (FAILED(hr))
 		return;
-
-	if (m_byteOffset == (uint32_t)-1)
-	{
-		// First call: place the write offset ahead of the play cursor by ~1/2 of
-		// the buffer. This builds a generous lead so the play cursor never catches
-		// up (no underrun). VERA's audio is self-contained — no Mockingboard-style
-		// alignment/feedback helpers are needed or used here.
-		m_byteOffset = (dwCurrentPlayCursor + (uint32_t)kDSBufferByteSize / 2) % kDSBufferByteSize;
-	}
-
 	(void)dwCurrentWriteCursor;
 
-	// Exact sample count via fractional accumulation. Writing precisely the
-	// samples due since the last update (sub-sample accurate) keeps the ring
-	// buffer perfectly balanced — no drift, no under/overflow, no sandy artifacts.
-	m_sampleAccum += updateInterval * (double)kSampleRate / g_fCurrentCLK6502;
+	if (m_lastPlayCursor == (uint32_t)-1)
+	{
+		// First call: establish a 1/2-buffer lead ahead of the play cursor and
+		// start tracking the play position.
+		m_lastPlayCursor = dwCurrentPlayCursor;
+		m_byteOffset = (dwCurrentPlayCursor + (uint32_t)kDSBufferByteSize / 2) % kDSBufferByteSize;
+		return;
+	}
+
+	// Bytes consumed by the play cursor since the last update (wrapped).
+	int bytesPlayed = (int)(dwCurrentPlayCursor - m_lastPlayCursor);
+	if (bytesPlayed < 0)
+		bytesPlayed += (int)kDSBufferByteSize;
+	m_lastPlayCursor = dwCurrentPlayCursor;
+
+	// Fractional sample accumulator: write exactly as many samples as were
+	// consumed, carrying the fractional remainder so the write rate exactly
+	// tracks the hardware — zero drift, zero under/overflow.
+	m_sampleAccum += (double)bytesPlayed / (sizeof(short) * kNumChannels);
 	int nNumSamples = (int)m_sampleAccum;
 	m_sampleAccum -= nNumSamples;
 

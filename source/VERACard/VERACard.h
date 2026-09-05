@@ -57,12 +57,11 @@ private:
 	static const UINT kNumChannels = 2;
 	static const UINT kSampleRate = 44100;
 	static const UINT kDSBufferByteSize = 44100 / 60 * 6 * 2 * kNumChannels;	// ~6 frames of stereo samples (~100 ms) for generous headroom
-	static const UINT kMinUpdateIntervalCycles = 500;
 
 	ULONG m_lastVideoUpdateCycle;
 	uint64_t m_lastFrameCycles;	// cumulative cycle count when the last full VERA frame was advanced
-	uint64_t m_lastSoundUpdateCycle;
 	uint32_t m_byteOffset;
+	uint32_t m_lastPlayCursor;	// last DS play-cursor position (drives sample gen)
 	double m_sampleAccum;	// fractional sample accumulator (exact sample gen)
 	bool m_bFrameCleared;
 	std::vector<short> m_mixBuffer;

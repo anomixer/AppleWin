@@ -60,6 +60,7 @@ private:
 
 	ULONG m_lastVideoUpdateCycle;
 	uint64_t m_lastFrameCycles;	// cumulative cycle count when the last full VERA frame was advanced
+	ULONGLONG m_lastSoundTick;	// real-time ms when UpdateSound last ran (stall detection)
 	uint32_t m_byteOffset;
 	uint32_t m_lastPlayCursor;	// last DS play-cursor position (drives sample gen)
 	double m_sampleAccum;	// fractional sample accumulator (exact sample gen)

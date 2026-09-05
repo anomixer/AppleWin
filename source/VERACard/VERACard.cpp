@@ -36,6 +36,7 @@ VERACard::VERACard(UINT slot)
 	: Card(CT_VERA, slot)
 	, m_lastVideoUpdateCycle(0)
 	, m_lastFrameCycles(0)
+	, m_lastSoundTick(0)
 	, m_byteOffset((uint32_t)-1)
 	, m_lastPlayCursor((uint32_t)-1)
 	, m_sampleAccum(0)
@@ -77,6 +78,7 @@ void VERACard::Reset(const bool powerCycle)
 
 	m_lastVideoUpdateCycle = 0;
 	m_lastFrameCycles = 0;
+	m_lastSoundTick = 0;
 	m_byteOffset = (uint32_t)-1;
 	m_lastPlayCursor = (uint32_t)-1;
 	m_sampleAccum = 0;
@@ -232,6 +234,7 @@ void VERACard::InitAudio()
 	m_byteOffset = (uint32_t)-1;
 	m_lastPlayCursor = (uint32_t)-1;
 	m_sampleAccum = 0;
+	m_lastSoundTick = 0;
 }
 
 void VERACard::UpdateSound()
@@ -252,6 +255,20 @@ void VERACard::UpdateSound()
 	if (FAILED(hr))
 		return;
 	(void)dwCurrentWriteCursor;
+
+	// Stall detection: if the emulator stalled (large real-time gap since the last
+	// UpdateSound — e.g. a video/CPU hang) the DS buffer kept looping the last
+	// audio, leaving a lingering tone. Flush the buffer and re-establish a fresh
+	// lead so no stale audio survives.
+	const ULONGLONG nowTick = GetTickCount64();
+	if (m_lastSoundTick != 0 && nowTick - m_lastSoundTick > 500)
+	{
+		DSZeroVoiceBuffer(&m_veraVoice, kDSBufferByteSize);
+		m_lastPlayCursor = (uint32_t)-1;
+		m_byteOffset = (uint32_t)-1;
+		m_sampleAccum = 0;
+	}
+	m_lastSoundTick = nowTick;
 
 	if (m_lastPlayCursor == (uint32_t)-1)
 	{

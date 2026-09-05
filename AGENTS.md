@@ -128,11 +128,13 @@ IIgs, only-VERA, and VERA+VidHD combinations.
 - `kDSBufferByteSize = 44100 / 60 * 6 * 2 * kNumChannels` (~6 frames of stereo
   audio ≈ 100 ms) with a **1/2-buffer lead** established on init, so the play
   cursor never catches up (no underrun).
-- Sample rate 44100 Hz, stereo. `UpdateSound()` uses an exact **fractional
-  sample accumulator** (`m_sampleAccum += updateInterval * kSampleRate /
-  g_fCurrentCLK6502`, then the integer part) — the write rate equals the play
-  rate exactly, zero drift. `UpdateSound()` is called each `Update()` and
-  generates samples based on elapsed `g_nCumulativeCycles`.
+- Sample rate 44100 Hz, stereo. `UpdateSound()` is driven by the **DS play
+  cursor**, not the emulated CPU clock: it generates exactly as many samples
+  as the hardware consumed since the last update (a fractional accumulator
+  `m_sampleAccum += bytesPlayed / (sizeof(short)*kNumChannels)` carries the
+  remainder), so the audio is synchronised to real-time playback — zero drift,
+  zero periodic glitch. (Generating from `g_nCumulativeCycles` drifted ~0.4%
+  from the DS clock and caused a glitch every ~14 s.)
 
 ## Debugging lessons (ordered)
 

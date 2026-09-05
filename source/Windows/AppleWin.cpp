@@ -519,8 +519,22 @@ static void OneTimeInitialization(HINSTANCE passinstance);
 static void RepeatInitialization();
 static void Shutdown();
 
+// Catch unhandled SEH exceptions (e.g. access violations) that the C++ try/catch
+// in WinMain cannot see. Logs the crash code + address so a memory-corruption
+// bug (like a VERA card overrun) can be located. Returns EXCEPTION_EXECUTE_HANDLER
+// so the process still terminates (we only log, we don't recover).
+static LONG CALLBACK HandleUnhandledException(EXCEPTION_POINTERS* pExceptionInfo)
+{
+	const DWORD code = pExceptionInfo->ExceptionRecord->ExceptionCode;
+	const PVOID addr = pExceptionInfo->ExceptionRecord->ExceptionAddress;
+	LogFileOutput("CRASH: unhandled exception 0x%08X at 0x%08X\n", code, (uint32_t)(ULONG_PTR)addr);
+	return EXCEPTION_EXECUTE_HANDLER;
+}
+
 int APIENTRY WinMain(HINSTANCE passinstance, HINSTANCE, LPSTR lpCmdLine, int)
 {
+	SetUnhandledExceptionFilter(&HandleUnhandledException);
+
 	char startDir[_MAX_PATH];
 	GetCurrentDirectory(sizeof(startDir), startDir);
 	g_sStartDir = startDir;

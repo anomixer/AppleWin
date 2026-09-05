@@ -164,7 +164,11 @@ IIgs, only-VERA, and VERA+VidHD combinations.
     feedback loop that SSI263/Mockingboard use. Fixed by adding the
     `nBytesRemaining` steering of `m_numSamplesError` (via
     `SoundCore_GetErrorInc()`) plus a maximum-update-interval cap and a
-    2×-nominal-batch sample clamp.
+    2×-nominal-batch sample clamp. **Gotcha:** `nBytesRemaining` must be
+    wrapped (`if (nBytesRemaining < 0) nBytesRemaining += kDSBufferByteSize`)
+    — omitting the wrap makes it always negative, `m_numSamplesError` grows
+    unbounded, the buffer overflows and the sandy sound gets **worse**
+    (and audio corruption can make the emulation feel "faster").
 
 ## Testing
 

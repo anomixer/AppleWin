@@ -273,7 +273,9 @@ void VERACard::UpdateSound()
 	// Steer the sample count so the ring-buffer doesn't under/overflow.
 	// This is a feedback loop: the adjustment below feeds into the NEXT batch's
 	// nNumSamples. Without it the buffer drifts and the sound turns sandy.
-	const int nBytesRemaining = (int)(m_byteOffset - dwCurrentPlayCursor);
+	int nBytesRemaining = (int)(m_byteOffset - dwCurrentPlayCursor);
+	if (nBytesRemaining < 0)
+		nBytesRemaining += (int)kDSBufferByteSize;	// wrap the ring-buffer offset
 	const int nErrorInc = SoundCore_GetErrorInc();
 	if (nBytesRemaining < (int)(kDSBufferByteSize / 4))
 		m_numSamplesError += nErrorInc;			// < 25% remaining

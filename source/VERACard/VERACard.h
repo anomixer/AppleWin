@@ -56,7 +56,7 @@ private:
 	static VOICE m_veraVoice;
 	static const UINT kNumChannels = 2;
 	static const UINT kSampleRate = 44100;
-	static const UINT kDSBufferByteSize = 44100 / 60 * 3 * 2 * kNumChannels;	// ~3 frames of stereo samples (avoid overwriting what's playing)
+	static const UINT kDSBufferByteSize = 44100 / 60 * 6 * 2 * kNumChannels;	// ~6 frames of stereo samples (~100 ms) for generous headroom
 	static const UINT kMinUpdateIntervalCycles = 500;
 
 	ULONG m_lastVideoUpdateCycle;

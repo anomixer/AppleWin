@@ -260,14 +260,14 @@ void VERACard::UpdateSound()
 
 	if (m_byteOffset == (uint32_t)-1)
 	{
-		// First call: place the write offset ahead of the play cursor by ~1/3 of
-		// the buffer. This builds a comfortable lead so the play cursor never
-		// catches up (no underrun), without any aggressive feedback loop.
-		m_byteOffset = (dwCurrentPlayCursor + (uint32_t)kDSBufferByteSize / 3) % kDSBufferByteSize;
+		// First call: place the write offset ahead of the play cursor by ~1/2 of
+		// the buffer. This builds a generous lead so the play cursor never catches
+		// up (no underrun). VERA's audio is self-contained — no Mockingboard-style
+		// alignment/feedback helpers are needed or used here.
+		m_byteOffset = (dwCurrentPlayCursor + (uint32_t)kDSBufferByteSize / 2) % kDSBufferByteSize;
 	}
 
-	if (SoundCore_ValidateAndAlignWriteOffset(m_byteOffset, dwCurrentPlayCursor, dwCurrentWriteCursor))
-		m_sampleAccum = 0;	// re-aligned; restart the accumulator cleanly
+	(void)dwCurrentWriteCursor;
 
 	// Exact sample count via fractional accumulation. Writing precisely the
 	// samples due since the last update (sub-sample accurate) keeps the ring

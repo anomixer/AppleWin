@@ -267,12 +267,13 @@ void VERACard::UpdateSound()
 	int nNumSamples = (int)m_sampleAccum;
 	m_sampleAccum -= nNumSamples;
 
-	// Pause protection: never write more than the whole ring buffer.
+	// Pause protection: never write more than the whole ring buffer, and never
+	// render a non-positive count (defensive against any degenerate cursor).
 	const int kMaxSamples = (int)(kDSBufferByteSize / (sizeof(short) * kNumChannels));
 	if (nNumSamples > kMaxSamples)
 		nNumSamples = kMaxSamples;
 
-	if (nNumSamples == 0)
+	if (nNumSamples <= 0)
 		return;
 
 	// Generate the samples from the VERA audio core.

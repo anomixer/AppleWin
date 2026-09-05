@@ -19,3 +19,6 @@ void LogDone();
 
 void LogOutput(const char* format, ...) ATTRIBUTE_FORMAT_PRINTF(1, 2);
 void LogFileOutput(const char* format, ...) ATTRIBUTE_FORMAT_PRINTF(1, 2);
+// Write to VERA.log next to the exe (always findable, independent of the
+// -log AppleWin.log which opens in the CWD). Used for VERA diagnostics.
+void LogWriteVERALog(const char* format, ...) ATTRIBUTE_FORMAT_PRINTF(1, 2);

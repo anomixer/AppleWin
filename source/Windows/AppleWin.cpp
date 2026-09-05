@@ -528,21 +528,7 @@ static LONG CALLBACK HandleUnhandledException(EXCEPTION_POINTERS* pExceptionInfo
 	const DWORD code = pExceptionInfo->ExceptionRecord->ExceptionCode;
 	const PVOID addr = pExceptionInfo->ExceptionRecord->ExceptionAddress;
 	LogFileOutput("CRASH: unhandled exception 0x%08X at 0x%08X\n", code, (uint32_t)(ULONG_PTR)addr);
-	// Also write to a dedicated file next to the exe, in case the global log
-	// was never initialised or the app runs from an unexpected directory.
-	char path[_MAX_PATH];
-	if (GetModuleFileNameA(NULL, path, _MAX_PATH) > 0)
-	{
-		char* slash = strrchr(path, '\\');
-		if (slash)
-			strcpy_s(slash, _MAX_PATH - static_cast<size_t>(slash - path), "\\VERACrash.log");
-		FILE* f = fopen(path, "a");
-		if (f)
-		{
-			fprintf(f, "CRASH: unhandled exception 0x%08X at 0x%08X\n", code, (uint32_t)(ULONG_PTR)addr);
-			fclose(f);
-		}
-	}
+	LogWriteVERALog("CRASH: unhandled exception 0x%08X at 0x%08X\n", code, (uint32_t)(ULONG_PTR)addr);
 	return EXCEPTION_EXECUTE_HANDLER;
 }
 

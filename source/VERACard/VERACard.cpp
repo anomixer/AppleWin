@@ -8,6 +8,7 @@
 #include <algorithm>
 
 #include "VERACard.h"
+#include "Log.h"
 
 #include "Common.h"
 #include "Core.h"
@@ -108,6 +109,13 @@ void VERACard::Update(const ULONG nExecutedCycles)
 	const uint64_t curCycles = g_nCumulativeCycles;
 	if (m_lastFrameCycles == 0)
 		m_lastFrameCycles = curCycles;	// first call: establish a baseline
+
+	// Heartbeat: log every ~600 Update() calls (~10 s) so a VERA crash can be
+	// located (which subsystem it stopped in). Written to VERA.log next to the
+	// exe, independent of the -log AppleWin.log.
+	static ULONG s_heartbeat = 0;
+	if ((s_heartbeat++ % 600) == 0)
+		LogWriteVERALog("VERA alive: update %u\n", s_heartbeat);
 
 	const uint64_t frameCycles = NTSC_GetCyclesPerFrame();
 	while (curCycles >= m_lastFrameCycles + frameCycles)
@@ -295,6 +303,11 @@ void VERACard::UpdateSound()
 	m_veraVoice.lpDSBvoice->Unlock(pLocked0, dwLockedSize0, pLocked1, dwLockedSize1);
 
 	m_byteOffset = (m_byteOffset + (uint32_t)nNumSamples * sizeof(short) * kNumChannels) % kDSBufferByteSize;
+
+	// Heartbeat: distinguish an audio-path crash from a video-path crash.
+	static ULONG s_audioBeat = 0;
+	if ((s_audioBeat++ % 600) == 0)
+		LogWriteVERALog("VERA audio ok\n");
 }
 
 // ---------------------------------------------------------------------------

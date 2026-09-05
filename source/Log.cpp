@@ -112,3 +112,23 @@ void LogFileOutput(const char* format, ...)
 
 	va_end(args);
 }
+
+// Write to VERA.log next to the exe (always findable). Independent of the
+// global AppleWin.log which opens in the CWD and only exists with -log.
+void LogWriteVERALog(const char* format, ...)
+{
+	char path[_MAX_PATH];
+	if (GetModuleFileNameA(NULL, path, _MAX_PATH) <= 0)
+		return;
+	char* slash = strrchr(path, '\\');
+	if (slash)
+		strcpy_s(slash, _MAX_PATH - static_cast<size_t>(slash - path), "\\VERA.log");
+	FILE* f = fopen(path, "a");
+	if (!f)
+		return;
+	va_list args;
+	va_start(args, format);
+	vfprintf(f, format, args);
+	va_end(args);
+	fclose(f);
+}

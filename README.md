@@ -30,6 +30,8 @@ Peripheral cards and add-on hardware supported:
 - Language Card and Saturn 64/128K for Apple II/II Plus (and Saturn 128K for any Apple II in any slot)
 - 4Play and SNES MAX joystick cards
 - VidHD card (functionality limited to IIgs' Super Hi-Res video modes)
+- Commander X16 VERA card (slot 2 or 4): 640×480 VGA/NTSC graphics, 2 layers,
+  128 sprites, 256-colour palette, 16-channel PSG + PCM audio, IRQ
 - No Slot Clock (NSC)
 - Game I/O Connector copy protection dongles 
 

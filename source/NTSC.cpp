@@ -2348,23 +2348,32 @@ void NTSC_VideoInit( uint8_t* pFramebuffer ) // wsVideoInit
 
 	g_kFrameBufferWidth = GetVideo().GetFrameBufferWidth();
 
-	// When the borderless region is taller than the Apple II image (e.g. VERA
-	// forces a 640x480 borderless area while the non-SHR image is only 384
-	// scan lines tall), vertically centre the Apple II image so it doesn't sit
-	// at the top of the screen with empty space below it. Only centre when the
-	// borderless area is taller than the IIgs image (the VERA 640x480 case);
-	// for the normal Apple II / IIgs sizes the image already fills the area.
+	// When VERA forces a 640x480 borderless area, the Apple II image (560x384)
+	// must be centred within it, both horizontally and vertically.
+	// - Vertical: centre the image in the taller area. Subtract
+	//   GetFrameBufferCentringOffsetY() because VidHD's GetFrameBufferCentringValue()
+	//   already shifts the image down by that amount when VidHD is present.
+	// - Horizontal: the existing VidHD centring (GetFrameBufferCentringValue)
+	//   only applies when VidHD is installed, so with only a VERA card we must
+	//   add the horizontal centring here.
 	const UINT imageHeight = VIDEO_SCANNER_Y_DISPLAY * 2;	// 384 (non-SHR)
+	const UINT imageWidth  = 280 * 2;			// 560 (Apple II)
 	const UINT borderlessHeight = GetVideo().GetFrameBufferBorderlessHeight();
-	const UINT centringOffset = (borderlessHeight > VIDEO_SCANNER_Y_DISPLAY_IIGS * 2)
-		? (borderlessHeight - imageHeight) / 2
+	const UINT borderlessWidth  = GetVideo().GetFrameBufferBorderlessWidth();
+	const bool tallerThanImage = borderlessHeight > imageHeight;
+
+	const UINT centringOffset = tallerThanImage
+		? ((borderlessHeight - imageHeight) / 2) - GetVideo().GetFrameBufferCentringOffsetY()
+		: 0;
+	const UINT hCentring = (borderlessWidth > imageWidth && !GetVideo().HasVidHD())
+		? (borderlessWidth - imageWidth) / 2
 		: 0;
 
 	for (int y = 0; y < (VIDEO_SCANNER_Y_DISPLAY_IIGS*2); y++)
 	{
 		uint32_t offset = sizeof(bgra_t) * GetVideo().GetFrameBufferWidth()
 			* ((GetVideo().GetFrameBufferHeight() - 1) - y - GetVideo().GetFrameBufferBorderHeight() - centringOffset)
-			+ (sizeof(bgra_t) * GetVideo().GetFrameBufferBorderWidth());
+			+ (sizeof(bgra_t) * (GetVideo().GetFrameBufferBorderWidth() + hCentring));
 		g_pScanLines[y] = (bgra_t*) (GetVideo().GetFrameBuffer() + offset);
 	}
 

@@ -100,13 +100,23 @@ Key integration points:
 - **RGBA packing** is done so the little-endian memory layout is R,G,B,A
   (byte 0 = R). Do not reverse this.
 
-### NTSC centring (Apple II text "偏上" fix)
+### NTSC centring (Apple II image "偏上 / 偏左" fix)
 
-When VERA forces a 480-tall borderless area, the NTSC Apple II image is only
-384 scan lines tall. `NTSC_VideoInit` (`source\NTSC.cpp`) adds a vertical
-`centringOffset` **only** when `borderlessHeight > VIDEO_SCANNER_Y_DISPLAY_IIGS * 2`
-(the VERA case), so the Apple II image is vertically centred instead of stuck
-at the top. The offset is `(borderlessHeight - 384) / 2`.
+When VERA forces a 640×480 borderless area, the NTSC Apple II image (560×384)
+must be centred within it. `NTSC_VideoInit` (`source\NTSC.cpp`) positions each
+scan line with two offsets:
+
+- **Vertical** `centringOffset = (borderlessHeight - 384)/2 - GetFrameBufferCentringOffsetY()`
+  — centres the image in the taller area, and subtracts VidHD's own vertical
+  shift (which `GetFrameBufferCentringValue()` applies when VidHD is present) so
+  the two mechanisms don't stack.
+- **Horizontal** `hCentring = (borderlessWidth > 560 && !HasVidHD()) ? (borderlessWidth - 560)/2 : 0`
+  — centres the image horizontally. This is needed **only when VERA is present
+  without VidHD**, because the existing VidHD centring (`GetFrameBufferCentringValue`)
+  already adds the horizontal offset when VidHD is installed.
+
+Net result: the Apple II image is correctly centred for normal Apple II,
+IIgs, only-VERA, and VERA+VidHD combinations.
 
 ### Audio model
 
@@ -143,6 +153,12 @@ at the top. The offset is `(borderlessHeight - 384) / 2`.
    solved by the per-frame full-scan approach.
 10. **Apple II text offset up** — NTSC image anchored at top of a 480-tall
     borderless area; solved by the centring offset above.
+11. **Apple II image off-centre (偏下 / 偏左)** — vertical was shifted down by
+    VidHD's `GetFrameBufferCentringValue()` stacking on the VERA centring, and
+    horizontal centring only applied when VidHD was present. Fixed in
+    `NTSC_VideoInit` by subtracting `GetFrameBufferCentringOffsetY()` from the
+    vertical offset and adding a horizontal centring offset only for the
+    only-VERA case (`!HasVidHD()`).
 
 ## Testing
 

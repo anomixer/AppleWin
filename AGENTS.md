@@ -159,6 +159,12 @@ IIgs, only-VERA, and VERA+VidHD combinations.
     `NTSC_VideoInit` by subtracting `GetFrameBufferCentringOffsetY()` from the
     vertical offset and adding a horizontal centring offset only for the
     only-VERA case (`!HasVidHD()`).
+12. **Sandy/scratchy audio (沙沙聲)** — the ring buffer drifted into
+    under/overflow because `VERACard::UpdateSound()` lacked the fill-level
+    feedback loop that SSI263/Mockingboard use. Fixed by adding the
+    `nBytesRemaining` steering of `m_numSamplesError` (via
+    `SoundCore_GetErrorInc()`) plus a maximum-update-interval cap and a
+    2×-nominal-batch sample clamp.
 
 ## Testing
 

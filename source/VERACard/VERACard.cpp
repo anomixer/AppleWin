@@ -241,31 +241,24 @@ void VERACard::UpdateSound()
 		return;
 	}
 
-	const double updateInterval = (double)(g_nCumulativeCycles - m_lastSoundUpdateCycle);
+	double updateInterval = (double)(g_nCumulativeCycles - m_lastSoundUpdateCycle);
 	if (updateInterval < kMinUpdateIntervalCycles)
 		return;
 	m_lastSoundUpdateCycle = g_nCumulativeCycles;
+
+	// Cap the interval (e.g. after a debugger/pause) so we never try to write
+	// more than the ring buffer can hold.
+	const double kMaximumUpdateInterval = (double)(0xFFFF + 2);
+	if (updateInterval > kMaximumUpdateInterval)
+		updateInterval = kMaximumUpdateInterval;
 
 	// Convert cycles to sample count.
 	const double nIrqFreq = g_fCurrentCLK6502 / updateInterval + 0.5;	// round-up
 	int nNumSamples = (int)((double)kSampleRate / nIrqFreq) + m_numSamplesError;
 	if (nNumSamples <= 0)
 		nNumSamples = 0;
-	const UINT kMaxSamples = kDSBufferByteSize / (sizeof(short) * kNumChannels);	// frames of stereo
-	if (nNumSamples > (int)kMaxSamples)
-		nNumSamples = (int)kMaxSamples;
 
-	if (nNumSamples == 0)
-	{
-		if (m_numSamplesError)
-			m_byteOffset = 0;
-		return;
-	}
-
-	// Generate the samples from the VERA audio core.
-	m_audio.Render(m_mixBuffer.data(), nNumSamples);
-
-	// Write into the ring buffer.
+	// Read the ring-buffer position so we can steer the sample count below.
 	DWORD dwCurrentPlayCursor, dwCurrentWriteCursor;
 	HRESULT hr = m_veraVoice.lpDSBvoice->GetCurrentPosition(&dwCurrentPlayCursor, &dwCurrentWriteCursor);
 	if (FAILED(hr))
@@ -276,6 +269,34 @@ void VERACard::UpdateSound()
 
 	if (SoundCore_ValidateAndAlignWriteOffset(m_byteOffset, dwCurrentPlayCursor, dwCurrentWriteCursor))
 		m_numSamplesError = 0;
+
+	// Steer the sample count so the ring-buffer doesn't under/overflow.
+	// This is a feedback loop: the adjustment below feeds into the NEXT batch's
+	// nNumSamples. Without it the buffer drifts and the sound turns sandy.
+	const int nBytesRemaining = (int)(m_byteOffset - dwCurrentPlayCursor);
+	const int nErrorInc = SoundCore_GetErrorInc();
+	if (nBytesRemaining < (int)(kDSBufferByteSize / 4))
+		m_numSamplesError += nErrorInc;			// < 25% remaining
+	else if (nBytesRemaining > (int)(kDSBufferByteSize / 2))
+		m_numSamplesError -= nErrorInc;			// > 50% remaining
+	else
+		m_numSamplesError = 0;					// acceptable
+
+	// Clamp to a reasonable per-batch maximum (2x the nominal batch) so we
+	// never overwrite unplayed data.
+	const int nNumSamplesPerPeriod = (int)((double)kSampleRate / nIrqFreq);
+	if (nNumSamples > 2 * nNumSamplesPerPeriod)
+		nNumSamples = 2 * nNumSamplesPerPeriod;
+
+	if (nNumSamples == 0)
+	{
+		if (m_numSamplesError)
+			m_byteOffset = 0;
+		return;
+	}
+
+	// Generate the samples from the VERA audio core.
+	m_audio.Render(m_mixBuffer.data(), nNumSamples);
 
 	short* pLocked0;
 	short* pLocked1;

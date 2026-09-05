@@ -125,9 +125,12 @@ IIgs, only-VERA, and VERA+VidHD combinations.
   `SoundCore_ValidateAndAlignWriteOffset`). Audio is written to its own DS
   voice buffer via `DSGetSoundBuffer` / `DSGetLock` / `DSZeroVoiceBuffer`
   (`source\SoundCore.cpp`).
-- `kDSBufferByteSize = 44100 / 60 * 6 * 2 * kNumChannels` (~6 frames of stereo
-  audio ≈ 100 ms) with a **1/2-buffer lead** established on init, so the play
-  cursor never catches up (no underrun).
+- `kDSBufferByteSize = 44100 / 60 * 3 * 2 * kNumChannels` (~3 frames of stereo
+  audio ≈ 50 ms) with a **1/2-buffer lead** established on init, so the play
+  cursor never catches up (no underrun). (A 6-frame buffer was tried to help
+  the 14 s glitch but was reverted — the play-cursor approach is what actually
+  fixed the glitch, and the larger buffer was suspected in a VERA-dependent
+  crash.)
 - Sample rate 44100 Hz, stereo. `UpdateSound()` is driven by the **DS play
   cursor**, not the emulated CPU clock: it generates exactly as many samples
   as the hardware consumed since the last update (a fractional accumulator
@@ -188,6 +191,20 @@ IIgs, only-VERA, and VERA+VidHD combinations.
     producing a very fast high-frequency hiss. Move the LFSR advance above the
     channel loop so it ticks once per output sample (the noise generator is
     clocked at the PSG/sample rate).
+14. **Random "flash crash" (閃退) after minutes — VERA-installation dependent.**
+    The diagnostic that isolates it: the crash happens whenever the VERA card is
+    installed *and any app is running*, including a **non-VERA** app (e.g.
+    Mockingboard music). When VERA is removed, no crash (10+ min). This means
+    the crash is in code that runs whenever VERA is installed — `Update()`,
+    `UpdateSound()` or `VERAVideo::Step()` — **not** in the VERA display/audio
+    *app* path (`UpdateDisplay` only runs when video output is enabled, so it
+    is NOT the culprit for the non-VERA-app crash).
+    **Critical:** an access violation (0xC0000005) is an **SEH** exception and is
+    **NOT caught** by `WinMain`'s C++ `try/catch (std::exception)` — the process
+    simply terminates ("閃退"). To locate it, add a
+    `SetUnhandledExceptionFilter` handler that logs the exception code+address
+    (`source\Windows\AppleWin.cpp`); `LogFileOutput`'s log file is unbuffered
+    (`_IONBF`), so the line is flushed before termination.
 
 ## Testing
 

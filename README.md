@@ -35,6 +35,29 @@ Peripheral cards and add-on hardware supported:
 - No Slot Clock (NSC)
 - Game I/O Connector copy protection dongles 
 
+Commander X16 VERA card
+=======================
+
+The VERA expansion card (port of `apple2ts`'s TypeScript VERA) is installed in
+**slot 2 or 4** (`-s2 vera` / `-s4 vera`). It provides a 640×480 VGA/NTSC
+graphics core (2 layers, 128 sprites, 256-colour palette), a 16-channel PSG +
+PCM audio core, and an IRQ line.
+
+Behaviour:
+
+- **Dual screen** — when the VERA video output is *disabled* the Apple II
+  (NTSC) image is shown; the VERA framebuffer is only painted when the software
+  enables VERA video output (`IsVideoOutputEnabled`). This lets VERA software
+  switch between the Apple II screen and the VERA 640×480 display.
+- **Audio** — the VERA audio is self-contained (it does **not** borrow the
+  Mockingboard/SSI263 audio model). `UpdateSound()` is driven directly by the
+  DS play cursor so the write rate exactly tracks real-time playback — no
+  drift, no periodic glitch. The DS ring buffer is ~3 frames (~50 ms) with a
+  1/2-buffer lead.
+- **Diagnostics** — on a stall (emulator hang) the DS buffer is flushed so no
+  lingering audio survives. Heartbeat + unhandled-exception info is written to
+  `VERA.log` next to the exe (independent of the `-log` `AppleWin.log`).
+
 Running
 =======
 

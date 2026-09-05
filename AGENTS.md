@@ -204,7 +204,19 @@ IIgs, only-VERA, and VERA+VidHD combinations.
     simply terminates ("閃退"). To locate it, add a
     `SetUnhandledExceptionFilter` handler that logs the exception code+address
     (`source\Windows\AppleWin.cpp`); `LogFileOutput`'s log file is unbuffered
-    (`_IONBF`), so the line is flushed before termination.
+    (`_IONBF`), so the line is flushed before termination. Note `LogInit()` only
+    runs with `-log`, so `AppleWin.log` often does not exist — use
+    `LogWriteVERALog()` which appends to `VERA.log` next to the exe.
+15. **Music stuck / lingering audio (餘音) after a stall** — when the emulator
+    stalls (a video/CPU hang), `UpdateSound` is not called and the DS buffer
+    keeps looping the last audio, leaving a lingering tone even after the audio
+    resumes. A heartbeat log (every ~600 `Update()` calls: `VERA alive: update N`,
+    plus a `VERA audio ok` marker after `UpdateSound`) reveals the stall: the
+    heartbeat stops at the last `VERA alive` (no `audio ok` after it) → the hang
+    is in the video `Step()`; if it stops after `VERA audio ok`, it is in
+    `UpdateSound`. **Fix:** track the real-time ms between `UpdateSound` calls
+    (`GetTickCount64`); if the gap exceeds ~500 ms, `DSZeroVoiceBuffer` the voice
+    and re-establish a fresh lead so no stale audio survives.
 
 ## Testing
 

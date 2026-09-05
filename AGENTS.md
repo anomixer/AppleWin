@@ -120,12 +120,18 @@ IIgs, only-VERA, and VERA+VidHD combinations.
 
 ### Audio model
 
-- SSI263-style ring buffer via `DSGetSoundBuffer` / `DSGetLock` /
-  `DSZeroVoiceBuffer` (`source\SoundCore.cpp`).
-- `kDSBufferByteSize = 44100 / 60 * 3 * 2 * kNumChannels` (~3 frames of stereo
-  audio) — this avoids overwriting audio that is still playing (a 1-frame
-  buffer caused choppy sound).
-- Sample rate 44100 Hz, stereo. `UpdateSound()` is called each `Update()` and
+- VERA is a **self-contained, independent card** — it does **not** borrow
+  Mockingboard/SSI263's audio model (no fill-level feedback loop, no
+  `SoundCore_ValidateAndAlignWriteOffset`). Audio is written to its own DS
+  voice buffer via `DSGetSoundBuffer` / `DSGetLock` / `DSZeroVoiceBuffer`
+  (`source\SoundCore.cpp`).
+- `kDSBufferByteSize = 44100 / 60 * 6 * 2 * kNumChannels` (~6 frames of stereo
+  audio ≈ 100 ms) with a **1/2-buffer lead** established on init, so the play
+  cursor never catches up (no underrun).
+- Sample rate 44100 Hz, stereo. `UpdateSound()` uses an exact **fractional
+  sample accumulator** (`m_sampleAccum += updateInterval * kSampleRate /
+  g_fCurrentCLK6502`, then the integer part) — the write rate equals the play
+  rate exactly, zero drift. `UpdateSound()` is called each `Update()` and
   generates samples based on elapsed `g_nCumulativeCycles`.
 
 ## Debugging lessons (ordered)

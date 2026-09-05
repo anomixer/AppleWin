@@ -159,6 +159,27 @@ IIgs, only-VERA, and VERA+VidHD combinations.
     `NTSC_VideoInit` by subtracting `GetFrameBufferCentringOffsetY()` from the
     vertical offset and adding a horizontal centring offset only for the
     only-VERA case (`!HasVidHD()`).
+12. **Sandy/scratchy audio (沙沙聲) — root cause.** The VERA ring buffer is
+    only ~3 frames (8820 bytes ≈ 50 ms), but the SSI263/Mockingboard fill-level
+    feedback loop (steering `m_numSamplesError` via `SoundCore_GetErrorInc()`,
+    ±20 per batch) is tuned for a **65536-byte** buffer. On the tiny VERA buffer
+    that ±20 correction makes the audio core generate samples faster/slower than
+    real time → pitch warble that sounds like static and covers the music. The
+    integer truncation (`(int)(44100/nIrqFreq)` = 43) vs the true rate (43.11)
+    also makes the buffer drain and underrun every ~20 s.
+    **FINAL fix (current):** no feedback loop at all. Use an exact **fractional
+    sample accumulator** (`m_sampleAccum += updateInterval * kSampleRate /
+    g_fCurrentCLK6502`, then take the integer part) so the write rate equals the
+    play rate exactly — zero drift, zero under/overflow. Establish a **~1/3-buffer
+    lead** on init so the play cursor never catches up. **Gotchas:** the
+    first-call sentinel must be `(uint32_t)-1`, not `== 0` (0 is a valid ring
+    position — the cumulative offset returns to exactly 0 ~every 50 ms); and
+    `nBytesRemaining` must be wrapped if it's ever computed.
+13. **PSG noise clocked 16× too fast** — `renderSample` advanced the shared
+    noise LFSR once per *channel* (16× per sample) instead of once per sample,
+    producing a very fast high-frequency hiss. Move the LFSR advance above the
+    channel loop so it ticks once per output sample (the noise generator is
+    clocked at the PSG/sample rate).
 
 ## Testing
 

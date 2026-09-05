@@ -37,6 +37,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "NTSC.h"
 #include "RGBMonitor.h"
 #include "VidHD.h"
+#include "VERACard/VERACard.h"
 #include "YamlHelper.h"
 
 #define  SW_80COL         (g_uVideoMode & VF_80COL)
@@ -93,11 +94,13 @@ const char* const Video::g_apVideoModeDesc[NUM_VIDEO_MODES] =
 
 UINT Video::GetFrameBufferBorderlessWidth()
 {
-	return HasVidHD() ? kVideoWidthIIgs : kVideoWidthII;
+	return (HasVidVERA() || HasVidHD()) ? kVideoWidthIIgs : kVideoWidthII;
 }
 
 UINT Video::GetFrameBufferBorderlessHeight()
 {
+	if (HasVidVERA())
+		return 480;	// VERA uses a 640x480 framebuffer
 	return HasVidHD() ? kVideoHeightIIgs : kVideoHeightII;
 }
 
@@ -854,7 +857,7 @@ void Video::Destroy()
 
 void Video::VideoRefreshBuffer(uint32_t uRedrawWholeScreenVideoMode, bool bRedrawWholeScreen)
 {
-	if (bRedrawWholeScreen || g_nAppMode == MODE_PAUSED)
+	if ((bRedrawWholeScreen || g_nAppMode == MODE_PAUSED) && !IsVidVERAActive())
 	{
 		// uVideoModeForWholeScreen set if:
 		// . MODE_DEBUG   : always
@@ -868,6 +871,12 @@ void Video::VideoRefreshBuffer(uint32_t uRedrawWholeScreenVideoMode, bool bRedra
 		if (g_nAppMode == MODE_DEBUG || g_nAppMode == MODE_PAUSED)
 			NTSC_VideoRedrawWholeScreen();
 	}
+}
+
+bool Video::IsVidVERAActive()
+{
+	VERACard* pCard = GetCardMgr().GetVERACard();
+	return (pCard != NULL) && pCard->IsActive();
 }
 
 void Video::ClearFrameBuffer()

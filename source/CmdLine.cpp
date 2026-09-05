@@ -274,6 +274,11 @@ bool ProcessCmdLine(LPSTR lpCmdLine)
 					if (!CardInstanceExists(CT_VidHD))
 						g_cmdLine.slotInfo[slot].card = CT_VidHD;
 				}
+				else if (strcmp(lpCmdLine, "vera") == 0)
+				{
+					if (!CardInstanceExists(CT_VERA))
+						g_cmdLine.slotInfo[slot].card = CT_VERA;
+				}
 				else if (strncmp(lpCmdLine, "ay-socket", 9) == 0 &&
 					(lpCmdLine[9] >= '0' || lpCmdLine[9] <= '3') &&	// 0=bottom of MB-C card, 1=top of MB-C card, 2+3 for Phasor
 					lpCmdLine[10] == '=')

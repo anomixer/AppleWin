@@ -2348,10 +2348,22 @@ void NTSC_VideoInit( uint8_t* pFramebuffer ) // wsVideoInit
 
 	g_kFrameBufferWidth = GetVideo().GetFrameBufferWidth();
 
+	// When the borderless region is taller than the Apple II image (e.g. VERA
+	// forces a 640x480 borderless area while the non-SHR image is only 384
+	// scan lines tall), vertically centre the Apple II image so it doesn't sit
+	// at the top of the screen with empty space below it. Only centre when the
+	// borderless area is taller than the IIgs image (the VERA 640x480 case);
+	// for the normal Apple II / IIgs sizes the image already fills the area.
+	const UINT imageHeight = VIDEO_SCANNER_Y_DISPLAY * 2;	// 384 (non-SHR)
+	const UINT borderlessHeight = GetVideo().GetFrameBufferBorderlessHeight();
+	const UINT centringOffset = (borderlessHeight > VIDEO_SCANNER_Y_DISPLAY_IIGS * 2)
+		? (borderlessHeight - imageHeight) / 2
+		: 0;
+
 	for (int y = 0; y < (VIDEO_SCANNER_Y_DISPLAY_IIGS*2); y++)
 	{
 		uint32_t offset = sizeof(bgra_t) * GetVideo().GetFrameBufferWidth()
-			* ((GetVideo().GetFrameBufferHeight() - 1) - y - GetVideo().GetFrameBufferBorderHeight())
+			* ((GetVideo().GetFrameBufferHeight() - 1) - y - GetVideo().GetFrameBufferBorderHeight() - centringOffset)
 			+ (sizeof(bgra_t) * GetVideo().GetFrameBufferBorderWidth());
 		g_pScanLines[y] = (bgra_t*) (GetVideo().GetFrameBuffer() + offset);
 	}
@@ -2473,6 +2485,38 @@ void NTSC_VideoInitChroma()
 // .  2-14: After one emulated 6502/65C02 opcode (optionally with IRQ)
 // . ~1000: After 1ms of Z80 emulation
 // . 17030: From NTSC_VideoRedrawWholeScreen()
+
+// Called when the VERA card's video output is active: advances the NTSC scan
+// counters without writing to the framebuffer, so the VERA framebuffer (which
+// is drawn directly by the VERA card) is preserved.
+static void updateScreenVERANoOp(long cycles6502)
+{
+	for (; cycles6502 > 0; --cycles6502)
+	{
+		if (VIDEO_SCANNER_MAX_HORZ == ++g_nVideoClockHorz)
+		{
+			g_nVideoClockHorz = 0;
+			if (++g_nVideoClockVert == g_videoScannerMaxVert)
+			{
+				g_nVideoClockVert = 0;
+				updateFlashRate();
+			}
+			if (g_nVideoClockVert < VIDEO_SCANNER_Y_DISPLAY)
+				updateVideoScannerAddress();
+		}
+	}
+}
+
+// Routes a graphics update either to the normal NTSC renderer or to the VERA
+// no-op renderer when the VERA card is displaying its own framebuffer.
+static void VideoUpdateGraphicsScreen(int cycles)
+{
+	if (GetVideo().IsVidVERAActive())
+		updateScreenVERANoOp(cycles);
+	else
+		g_pFuncUpdateGraphicsScreen(cycles);
+}
+
 static void VideoUpdateCycles( int cyclesLeftToUpdate )
 {
 	const int cyclesToEndOfLine = VIDEO_SCANNER_MAX_HORZ - g_nVideoClockHorz;
@@ -2481,12 +2525,12 @@ static void VideoUpdateCycles( int cyclesLeftToUpdate )
 	{
 		const int cyclesToLine160 = VIDEO_SCANNER_MAX_HORZ * (VIDEO_SCANNER_Y_MIXED - g_nVideoClockVert - 1) + cyclesToEndOfLine;
 		int cycles = cyclesLeftToUpdate < cyclesToLine160 ? cyclesLeftToUpdate : cyclesToLine160;
-		g_pFuncUpdateGraphicsScreen(cycles);						// lines [currV...159]
+		VideoUpdateGraphicsScreen(cycles);						// lines [currV...159]
 		cyclesLeftToUpdate -= cycles;
 
 		const int cyclesFromLine160ToLine261 = g_videoScanner6502Cycles - (VIDEO_SCANNER_MAX_HORZ * VIDEO_SCANNER_Y_MIXED);
 		cycles = cyclesLeftToUpdate < cyclesFromLine160ToLine261 ? cyclesLeftToUpdate : cyclesFromLine160ToLine261;
-		g_pFuncUpdateGraphicsScreen(cycles);						// lines [160..191..261]
+		VideoUpdateGraphicsScreen(cycles);						// lines [160..191..261]
 		cyclesLeftToUpdate -= cycles;
 
 		// Any remaining cyclesLeftToUpdate: lines [0...currV)
@@ -2495,19 +2539,19 @@ static void VideoUpdateCycles( int cyclesLeftToUpdate )
 	{
 		const int cyclesToLine262 = VIDEO_SCANNER_MAX_HORZ * (g_videoScannerMaxVert - g_nVideoClockVert - 1) + cyclesToEndOfLine;
 		int cycles = cyclesLeftToUpdate < cyclesToLine262 ? cyclesLeftToUpdate : cyclesToLine262;
-		g_pFuncUpdateGraphicsScreen(cycles);						// lines [currV...261]
+		VideoUpdateGraphicsScreen(cycles);						// lines [currV...261]
 		cyclesLeftToUpdate -= cycles;
 
 		const int cyclesFromLine0ToLine159 = VIDEO_SCANNER_MAX_HORZ * VIDEO_SCANNER_Y_MIXED;
 		cycles = cyclesLeftToUpdate < cyclesFromLine0ToLine159 ? cyclesLeftToUpdate : cyclesFromLine0ToLine159;
-		g_pFuncUpdateGraphicsScreen(cycles);					// lines [0..159]
+		VideoUpdateGraphicsScreen(cycles);					// lines [0..159]
 		cyclesLeftToUpdate -= cycles;
 
 		// Any remaining cyclesLeftToUpdate: lines [160...currV)
 	}
 
 	if (cyclesLeftToUpdate)
-		g_pFuncUpdateGraphicsScreen(cyclesLeftToUpdate);
+		VideoUpdateGraphicsScreen(cyclesLeftToUpdate);
 }
 
 //===========================================================================

@@ -14,7 +14,8 @@ public:
 		m_pSSC(NULL),
 		m_pParallelPrinterCard(NULL),
 		m_pVidHDCard(NULL),
-		m_pZ80Card(NULL)
+		m_pZ80Card(NULL),
+		m_pVERACard(NULL)
 	{
 		// LoadConfiguration() now sets up default cards for a new install
 		InsertInternal(SLOT0, CT_Empty);
@@ -64,6 +65,7 @@ public:
 	class ParallelPrinterCard* GetParallelPrinterCard() { return m_pParallelPrinterCard; }
 	bool IsParallelPrinterCardInstalled() { return m_pParallelPrinterCard != NULL; }
 	class VidHDCard* GetVidHDCard() { return m_pVidHDCard; }
+	class VERACard* GetVERACard() { return m_pVERACard; }
 	SS_CARDTYPE QueryDefaultCardForSlot(UINT slot, eApple2Type model);
 
 	void GetCardChoicesForSlot(const UINT slot, const SS_CARDTYPE currConfig[NUM_SLOTS], std::vector<SS_CARDTYPE>& choicesList);
@@ -92,4 +94,5 @@ private:
 	class ParallelPrinterCard* m_pParallelPrinterCard;
 	class VidHDCard* m_pVidHDCard;
 	class Z80Card* m_pZ80Card;
+	class VERACard* m_pVERACard;
 };

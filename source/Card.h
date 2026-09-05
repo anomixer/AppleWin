@@ -30,6 +30,7 @@ enum SS_CARDTYPE
 	CT_MegaAudio,		// Soundcard
 	CT_SDMusic,			// Soundcard
 	CT_BreakpointCard,
+	CT_VERA,			// Commander X16 VERA card
 	CT_NUM_CARDS,
 	CT_Undefined = -1	// NB. Only for cmd line struct
 };

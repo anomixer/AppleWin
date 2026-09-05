@@ -286,6 +286,12 @@ public:
 	bool HasVidHD() { return m_hasVidHD; }
 	void SetVidHD(bool hasVidHD) { m_hasVidHD = hasVidHD; }
 
+	// VERA: when a VERA card is installed, a larger framebuffer is requested.
+	bool HasVidVERA() { return m_hasVidVERA; }
+	void SetVidVERA(bool hasVidVERA) { m_hasVidVERA = hasVidVERA; }
+	// True when the VERA card's video output is currently enabled (drives display override).
+	bool IsVidVERAActive();
+
 	static const UINT kVideoRomSize2K = 1024*2;
 	static const UINT kVideoRomSize4K = kVideoRomSize2K*2;
 
@@ -305,6 +311,7 @@ private:
 	bool g_bVideoScannerNTSC;	// NTSC video scanning (or PAL)
 	COLORREF g_nMonochromeRGB;	// saved to Registry
 	bool m_hasVidHD;
+	bool m_hasVidVERA;
 
 	static const UINT kVideoRomSize8K = kVideoRomSize4K*2;
 	static const UINT kVideoRomSize16K = kVideoRomSize8K*2;

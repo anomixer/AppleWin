@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <ClCompile Include="source\6821.cpp">
@@ -237,6 +237,15 @@
     </ClCompile>
     <ClCompile Include="Source\VidHD.cpp">
       <Filter>Source Files\Video</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\VERACard\VERACard.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\VERACard\VERAAudio.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\VERACard\VERAVideo.cpp">
+      <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="source\6522.cpp">
       <Filter>Source Files\Emulator</Filter>
@@ -581,6 +590,15 @@
     </ClInclude>
     <ClInclude Include="Source\VidHD.h">
       <Filter>Source Files\Video</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\VERACard\VERACard.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\VERACard\VERAAudio.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\VERACard\VERAVideo.h">
+      <Filter>Source Files</Filter>
     </ClInclude>
     <ClInclude Include="source\6522.h">
       <Filter>Source Files\Emulator</Filter>

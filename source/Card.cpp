@@ -34,6 +34,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "SerialComms.h"
 #include "SNESMAX.h"
 #include "VidHD.h"
+#include "VERACard/VERACard.h"
 #include "z80emu.h"
 
 #include <sstream>
@@ -178,6 +179,8 @@ std::string Card::GetCardName(const SS_CARDTYPE cardType)
 		return MockingboardCard::GetSnapshotCardNameSDMusic();
 	case CT_BreakpointCard:
 		return BreakpointCard::GetSnapshotCardName();
+	case CT_VERA:
+		return VERACard::GetSnapshotCardName();
 	default:
 		return "Unknown";
 	}
@@ -223,6 +226,8 @@ SS_CARDTYPE Card::GetCardType(const std::string & card)
 		return CT_SDMusic;
 	else if (card == BreakpointCard::GetSnapshotCardName())
 		return CT_BreakpointCard;
+	else if (card == VERACard::GetSnapshotCardName())
+		return CT_VERA;
 	else
 		throw std::runtime_error("Slots: Unknown card: " + card);	// todo: don't throw - just ignore & continue
 }

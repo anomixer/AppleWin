@@ -45,6 +45,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "Uthernet1.h"
 #include "Uthernet2.h"
 #include "VidHD.h"
+#include "VERACard/VERACard.h"
 #include "LanguageCard.h"
 #include "Memory.h"
 #include "z80emu.h"
@@ -115,6 +116,11 @@ void CardManager::InsertInternal(UINT slot, SS_CARDTYPE type)
 		if (m_pVidHDCard) break;	// Only support one VidHD card
 		m_slot[slot] = m_pVidHDCard = new VidHDCard(slot);
 		break;
+	case CT_VERA:
+		_ASSERT(m_pVERACard == NULL);
+		if (m_pVERACard) break;	// Only support one VERA card
+		m_slot[slot] = m_pVERACard = new VERACard(slot);
+		break;
 	case CT_Uthernet2:
 		m_slot[slot] = new Uthernet2(slot);
 		break;
@@ -181,6 +187,9 @@ void CardManager::RemoveInternal(UINT slot)
 			break;
 		case CT_VidHD:
 			m_pVidHDCard = NULL;
+			break;
+		case CT_VERA:
+			m_pVERACard = NULL;
 			break;
 		case CT_Z80:
 			m_pZ80Card = NULL;
@@ -362,7 +371,8 @@ bool CardManager::IsSingleInstanceCard(SS_CARDTYPE card)
 	CT_SNESMAX,
 	CT_Uthernet,
 	CT_Uthernet2,
-	CT_VidHD
+	CT_VidHD,
+	CT_VERA
 	};
 
 	for (int i = 0; i < std::size(uniqueCards); i++)
@@ -407,6 +417,7 @@ void CardManager::GetCardChoicesForSlot(const UINT slot, const SS_CARDTYPE currC
 	CT_Uthernet,
 	CT_Uthernet2,
 	CT_VidHD,
+	CT_VERA,
 	CT_Z80,
 	//	CT_GenericClock,
 	//	CT_Echo,

@@ -523,6 +523,8 @@ static void Shutdown();
 // in WinMain cannot see. Logs the crash code + address so a memory-corruption
 // bug (like a VERA card overrun) can be located. Returns EXCEPTION_EXECUTE_HANDLER
 // so the process still terminates (we only log, we don't recover).
+// Debug-only: Release builds run exactly like upstream (no extra handler).
+#ifdef _DEBUG
 static LONG CALLBACK HandleUnhandledException(EXCEPTION_POINTERS* pExceptionInfo)
 {
 	const DWORD code = pExceptionInfo->ExceptionRecord->ExceptionCode;
@@ -531,10 +533,13 @@ static LONG CALLBACK HandleUnhandledException(EXCEPTION_POINTERS* pExceptionInfo
 	LogWriteVERALog("CRASH: unhandled exception 0x%08X at 0x%08X\n", code, (uint32_t)(ULONG_PTR)addr);
 	return EXCEPTION_EXECUTE_HANDLER;
 }
+#endif
 
 int APIENTRY WinMain(HINSTANCE passinstance, HINSTANCE, LPSTR lpCmdLine, int)
 {
+#ifdef _DEBUG
 	SetUnhandledExceptionFilter(&HandleUnhandledException);
+#endif
 
 	char startDir[_MAX_PATH];
 	GetCurrentDirectory(sizeof(startDir), startDir);

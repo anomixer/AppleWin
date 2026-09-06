@@ -1,87 +1,96 @@
-# VERA 卡（AppleWin 擴充卡）說明文件
+# VERA Card (AppleWin expansion card) documentation
 
-本文說明本專案將 **Commander X16 的 VERA（Versatile Embedded Retro Adapter）**
-晶片移植成 **AppleWin 插槽擴充卡**的規格、與 AppleWin 整合的方式、以及使用
-方法。核心是 `apple2ts` 的 TypeScript 實作（`src/worker/devices/vera/`）的
-C++ 移植。
+This document describes the port of the **Commander X16 VERA (Versatile
+Embedded Retro Adapter)** chip into an **AppleWin slot expansion card** —
+its specification, how it integrates with AppleWin, and how to use it. The
+core is a C++ port of `apple2ts`'s TypeScript implementation
+(`src/worker/devices/vera/`).
 
-> 與 VERA 相關的開發架構、建置與除錯記錄請見 `AGENTS.md`。
-
----
-
-## 1. 概觀
-
-- VERA 卡可插入 **Slot 2 或 Slot 4**。
-- 提供完整 VERA 顯示核心（640×480 VGA / NTSC 掃描、雙圖層、128 個精靈、
-  256 色調色盤、FX 暫存器）與音效核心（16 通道 PSG + PCM FIFO）。
-- 提供一條 IRQ 中斷線。
-- 軟體原始碼位於 `source\VERACard\`：
-  - `VERAVideo.h/.cpp` — 顯示核心（video.ts 移植）
-  - `VERAAudio.h/.cpp` — 音效核心（PSG + PCM）
-  - `VERACard.h/.cpp` — 插槽卡整合、IO、Update、音效緩衝、存檔
-
-### 尚未實作
-
-- **SD 卡**（SPI 暫存器 `$9F3E/$9F3F` 目前為空操作）已決定延期。
-- 完整 VERA 音效（PSG 已實作 16 通道 + PCM）。
+> For the development architecture, build workflow and debugging notes,
+> see `AGENTS.md`.
 
 ---
 
-## 2. 與 AppleWin 的整合
+## 1. Overview
 
-### 2.1 IO 定址
+- The VERA card can be installed in **Slot 2 or Slot 4**.
+- It provides the full VERA display core (640×480 VGA / NTSC scan, 2 layers,
+  128 sprites, 256-colour palette, FX registers) and audio core
+  (16-channel PSG + PCM FIFO).
+- It provides one IRQ line.
+- Source code is in `source\VERACard\`:
+  - `VERAVideo.h/.cpp` — display core (port of `video.ts`)
+  - `VERAAudio.h/.cpp` — audio core (PSG + PCM)
+  - `VERACard.h/.cpp` — slot-card integration, IO, Update, audio buffer, save-state
 
-VERA 暫存器位於所選插槽的 **Cx 區域**：`$Cs00–$CsFF`，其中 `addr & 0xff`
-選定暫存器。透過 `RegisterIoHandler(slot, IO_Null, IO_Null, &IOReadCx,
-&IOWriteCx, ...)` 註冊（見 `VERACard::InitializeIO`）。
+### Not yet implemented
 
-### 2.2 顯示（雙螢幕設計）
+- **SD card** (SPI registers `$9F3E/$9F3F` are currently no-ops) — deferred.
+- Full VERA audio is done (16-channel PSG + PCM implemented).
 
-依使用者的設計理念，本實作採用「二合一」顯示：**平常顯示 Apple II 原始畫面，
-只有當 VERA 軟體啟用 VERA 顯示輸出時才切換成 VERA 畫面**。
+---
 
-- 當 VERA 卡存在時，Video framebuffer 放大為 **680×516**
-  （無邊框 **640×480**，邊框 20 寬 / 18 高）。
-- `VERACard::Update()` 只在 `IsVideoOutputEnabled()` 為真時呼叫
-  `UpdateDisplay()` 把 VERA 640×480 framebuffer 複製進 AppleWin framebuffer；
-  否則保留 Apple II（NTSC）畫面。
-- `VideoRefreshBuffer` 在 `IsVidVERAActive()` 時跳過 NTSC 重繪。
-- framebuffer 為 **bottom-up**（row 0 = 底部）；VERA 與 NTSC 都用
-  `(framebufferHeight - 1) - y - borderHeight` 對映。
+## 2. Integration with AppleWin
+
+### 2.1 IO addressing
+
+The VERA registers live in the **Cx region** of the selected slot:
+`$Cs00–$CsFF`, where `addr & 0xff` selects the register. Registered via
+`RegisterIoHandler(slot, IO_Null, IO_Null, &IOReadCx, &IOWriteCx, ...)`
+(see `VERACard::InitializeIO`).
+
+### 2.2 Display (dual-screen design)
+
+Following the user's design intent, this implementation uses a "two-in-one"
+display: **the Apple II native screen is shown normally; the display only
+switches to the VERA screen when the VERA software enables VERA video
+output.**
+
+- When the VERA card is present, the Video framebuffer is resized to
+  **680×516** (borderless **640×480**, border 20 wide / 18 tall).
+- `VERACard::Update()` calls `UpdateDisplay()` only while
+  `IsVideoOutputEnabled()` is true, copying the VERA 640×480 framebuffer into
+  the AppleWin framebuffer; otherwise the Apple II (NTSC) screen is kept.
+- `VideoRefreshBuffer` skips the NTSC redraw when `IsVidVERAActive()`.
+- The framebuffer is **bottom-up** (row 0 = bottom); both VERA and NTSC map
+  with `(framebufferHeight - 1) - y - borderHeight`.
 
 ### 2.3 IRQ
 
-`eIRQSRC` 新增 `IS_VERA`；`VERACard::Update()` 依 `m_video.GetIRQOut()`
-呼叫 `CpuIrqAssert(IS_VERA)` / `CpuIrqDeassert(IS_VERA)`。
+`eIRQSRC` gains `IS_VERA`; `VERACard::Update()` calls
+`CpuIrqAssert(IS_VERA)` / `CpuIrqDeassert(IS_VERA)` based on
+`m_video.GetIRQOut()`.
 
-### 2.4 音效
+### 2.4 Audio
 
-- SSI263 式環形緩衝（`DSGetSoundBuffer` / `DSGetLock`）。
-- `kDSBufferByteSize = 44100 / 60 * 3 * 2 * kNumChannels`（約 3 幀立體聲），
-  避免覆蓋正在播放的音訊。
-- 取樣率 44100 Hz、立體聲；`UpdateSound()` 依 `g_nCumulativeCycles` 產生取樣。
+- SSI263-style ring buffer (`DSGetSoundBuffer` / `DSGetLock`).
+- `kDSBufferByteSize = 44100 / 60 * 3 * 2 * kNumChannels` (~3 frames of
+  stereo audio), sized so it never overwrites audio that is still playing.
+- Sample rate 44100 Hz, stereo; `UpdateSound()` generates samples.
 
 ---
 
-## 3. 顯示規格
+## 3. Display specification
 
-| 項目 | 值 |
+| Item | Value |
 |---|---|
-| framebuffer（VERA） | 640 × 480（RGBA） |
-| 掃描線 / 幀 | 525（VGA） |
-| 每線像素時脈 | 800（`VGA_SCAN_WIDTH`），PIXEL_FREQ = 25 MHz |
-| 完整一幀週期 | 525 × 800 / 25 = **16800** |
-| 圖層 | 2 |
-| 精靈 | 128 |
-| 調色盤 | 256 色（每色 8-bit RGB） |
-| VRAM | 128 KB（0x00000–0x1FFFF），含 PSG / 調色盤 / 精靈資料區 |
+| framebuffer (VERA) | 640 × 480 (RGBA) |
+| scanlines / frame | 525 (VGA) |
+| pixel clock per line | 800 (`VGA_SCAN_WIDTH`), PIXEL_FREQ = 25 MHz |
+| full frame period | 525 × 800 / 25 = **16800** |
+| layers | 2 |
+| sprites | 128 |
+| palette | 256 colours (8-bit RGB each) |
+| VRAM | 128 KB (0x00000–0x1FFFF), including PSG / palette / sprite data areas |
 
-### 顯示時序（AppleWin 整合）
+### Display timing (AppleWin integration)
 
-`VERACard::Update()` 被呼叫約 **16 次 / 幀**（每次約 1000 週期的批次）。為避免
-每批次推進不足造成掃描位置漂移（捲動），以及每批次強制完整掃描造成 16 倍速，
-目前做法是**每個 Apple 顯示幀只推進完整一幀**，用累積週期計數器
-`g_nCumulativeCycles` 偵測 Apple 幀邊界：
+`VERACard::Update()` is called about **16 times / frame** (each a ~1000-cycle
+batch). To avoid both the scan-position drift from advancing too little per
+batch (scrolling) and the 16x speedup from forcing a full scan per batch, the
+current approach advances **exactly one full frame per Apple display frame**,
+detecting the Apple frame boundary via the cumulative cycle counter
+`g_nCumulativeCycles`:
 
 ```cpp
 const uint64_t curCycles = g_nCumulativeCycles;
@@ -91,7 +100,7 @@ const uint64_t frameCycles = NTSC_GetCyclesPerFrame();
 while (curCycles >= m_lastFrameCycles + frameCycles)
 {
     m_lastFrameCycles += frameCycles;
-    m_video.Step(1, 16800, false);   // 完整一幀
+    m_video.Step(1, 16800, false);   // one full frame
     m_video.Update();
     if (m_video.IsVideoOutputEnabled())
         UpdateDisplay();
@@ -100,123 +109,128 @@ while (curCycles >= m_lastFrameCycles + frameCycles)
 
 ---
 
-## 4. IO 暫存器對映
+## 4. IO register map
 
-VERA 暫存器由 `addr & 0x1F` 選定（`VERAVideo::Write/Read`）。
+VERA registers are selected by `addr & 0x1F` (`VERAVideo::Write/Read`).
 
-| reg | 功能 |
+| reg | function |
 |---|---|
-| 0x00–0x02 | 資料/位址指標（ADDRL/ADDRM/ADDRH + INCR） |
-| 0x03, 0x04 | VRAM 資料讀寫（DATA0 / DATA1） |
-| 0x05 | 控制（`DCSEL`、`ADDRSEL`、bit7 = 軟體重置） |
-| 0x06 | `IEN`（IRQ 致能） |
-| 0x07 | `ISR`（IRQ 狀態清除） |
-| 0x08 | `IRQL`（IRQ 比較線） |
-| 0x09–0x0C | Composer 暫存器（依 `DCSEL` 選定） |
-| 0x0D–0x13 | Layer 0 暫存器（7 bytes） |
-| 0x14–0x1A | Layer 1 暫存器（7 bytes） |
-| 0x1B–0x1D | PCM（0x1B 控制、0x1C 速率、0x1D FIFO 寫入） |
-| 0x1E–0x1F | SPI（SD 卡，目前未實作） |
+| 0x00–0x02 | data/address pointer (ADDRL/ADDRM/ADDRH + INCR) |
+| 0x03, 0x04 | VRAM data read/write (DATA0 / DATA1) |
+| 0x05 | control (`DCSEL`, `ADDRSEL`, bit7 = software reset) |
+| 0x06 | `IEN` (IRQ enable) |
+| 0x07 | `ISR` (IRQ status clear) |
+| 0x08 | `IRQL` (IRQ compare line) |
+| 0x09–0x0C | Composer registers (selected by `DCSEL`) |
+| 0x0D–0x13 | Layer 0 registers (7 bytes) |
+| 0x14–0x1A | Layer 1 registers (7 bytes) |
+| 0x1B–0x1D | PCM (0x1B control, 0x1C rate, 0x1D FIFO write) |
+| 0x1E–0x1F | SPI (SD card, not implemented) |
 
-### Composer（DCSEL=0，offset 進入 `m_reg_composer`）
+### Composer (DCSEL=0, offset into `m_reg_composer`)
 
-| offset | 功能（依 `render_line` 程式碼） |
+| offset | function (per `render_line` code) |
 |---|---|
-| 0 | DC_VIDEO：bits 0–1 = out_mode（0=停用，非 0=啟用）、bit 3 = 交錯、bit 4/5/6 = Layer0/1/精靈致能 |
-| 1 | 水平縮放（scale） |
-| 2 | 垂直縮放（用於 eff_y 累積） |
-| 3 | 邊框顏色（border_color） |
-| 4 | hstart（<<2） |
-| 5 | hstop（<<2） |
-| 6 | vstart（<<1） |
-| 7 | vstop（<<1） |
-| 8+ | 色度 hscale |
-| 9+ | FX 暫存器：DCSEL 2–6（位址/增量/像素位置/快取等） |
+| 0 | DC_VIDEO: bits 0–1 = out_mode (0=disabled, nonzero=enabled), bit 3 = interlace, bits 4/5/6 = Layer0/1/sprite enable |
+| 1 | horizontal scale (scale) |
+| 2 | vertical scale (used for eff_y accumulation) |
+| 3 | border colour (border_color) |
+| 4 | hstart (<<2) |
+| 5 | hstop (<<2) |
+| 6 | vstart (<<1) |
+| 7 | vstop (<<1) |
+| 8+ | chroma hscale |
+| 9+ | FX registers: DCSEL 2–6 (address/increment/pixel position/cache, etc.) |
 
-### Layer 暫存器（每層 7 bytes）
+### Layer registers (7 bytes per layer)
 
-| byte | 說明 |
+| byte | description |
 |---|---|
-| 0 | 設定：color_depth（bits 0–1）、bitmap_mode（bit 2）、text_256c（bit 3）、mapw（bits 4–5）、maph（bits 6–7） |
-| 1 | map_base（<<9） |
-| 2 | tile_base（bits 0–5，<<9）、tile 寬高（bits 0–1） |
-| 3 | HSCROLL 低 8 bits |
-| 4 | HSCROLL 高 4 bits（`& 0xF`） |
-| 5 | VSCROLL 低 8 bits |
-| 6 | VSCROLL 高 4 bits（`& 0xF`） |
+| 0 | settings: color_depth (bits 0–1), bitmap_mode (bit 2), text_256c (bit 3), mapw (bits 4–5), maph (bits 6–7) |
+| 1 | map_base (<<9) |
+| 2 | tile_base (bits 0–5, <<9), tile width/height (bits 0–1) |
+| 3 | HSCROLL low 8 bits |
+| 4 | HSCROLL high 4 bits (`& 0xF`) |
+| 5 | VSCROLL low 8 bits |
+| 6 | VSCROLL high 4 bits (`& 0xF`) |
 
 ---
 
-## 5. 音效規格
+## 5. Audio specification
 
 ### PSG
 
-- 16 通道，時脈 `PSG_CLOCK = 25000000 / 512`。
-- 每通道：頻率、音量、左右、脈寬、波形（PWM / 鋸齒 / 雜訊）。
-- 寫入位址 `0x1F9C0–0x1F9FF`（PSG 區）。
+- 16 channels, clocked at `PSG_CLOCK = 25000000 / 512`.
+- Per channel: frequency, volume, left/right, pulse width, waveform
+  (PWM / saw / noise).
+- Write address `0x1F9C0–0x1F9FF` (PSG area).
 
 ### PCM
 
-- 4096 bytes FIFO，支援迴圈。
-- 控制 / 速率 / FIFO 寫入經由 `$9F3B–$9F3D`（reg 0x1B–0x1D）。
-- 支援 16-bit 線性、立體聲混音。
+- 4096-byte FIFO, supports looping.
+- Control / rate / FIFO write via `$9F3B–$9F3D` (reg 0x1B–0x1D).
+- Supports 16-bit linear, stereo mixing.
 
 ---
 
-## 6. 在 AppleWin 中使用（命令列）
+## 6. Using VERA in AppleWin (command line)
 
-VERA 卡由命令列指定插槽：
+The VERA card is selected by slot on the command line:
 
 ```
 AppleWin.exe -s2 vera
 ```
 
-或插到 slot 4：
+Or in slot 4:
 
 ```
 AppleWin.exe -s4 vera
 ```
 
-### 搭配 Slot 7 硬碟（例如 TimePilot）
+### With a Slot 7 hard disk (e.g. TimePilot)
 
 ```powershell
 Release\AppleWin.exe -s2 vera -s7 hdc -h1 "C:\dev\Time-Pilot\TimePilot-IIvera\TimePilot-IIvera.hdv"
 ```
 
-- `-s7 hdc`：Slot 7 安裝硬碟控制器（HardDisk Controller）。
-- `-h1 <image>`：Slot 7 硬碟第 1 顆影像（`-h2` 為第 2 顆）。
-- 啟動後先顯示 Apple II 畫面（DOS/ProDOS），軟體啟用 VERA 後自動切到 VERA 畫面。
+- `-s7 hdc`: install a hard disk controller in Slot 7.
+- `-h1 <image>`: Slot 7 hard disk image #1 (`-h2` for #2).
+- On startup the Apple II screen is shown (DOS/ProDOS); when software enables
+  VERA it switches to the VERA screen.
 
-### 圖形介面
+### GUI
 
-在「Slot」設定頁的下拉選單中選擇 VERA 卡（`CT_VERA`）即可。
+Select the VERA card (`CT_VERA`) in the "Slot" settings page dropdown.
 
 ---
 
-## 7. 建置與執行
+## 7. Build and run
 
 ```powershell
 $msbuild = "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe"
 & $msbuild "AppleWin-VS2022.vcxproj" /p:Configuration=Release /p:Platform=Win32 /v:normal /nologo
 ```
 
-> 注意：單執行緒建置較穩（`/m` 可能導致「0 Error 但 Build FAILED」）；
-> 建置前若 `AppleWin.exe` 仍在執行會造成 LNK1104，需先 `Stop-Process`。
+> Note: single-threaded build is more reliable (`/m` can produce "Build FAILED"
+> with 0 errors); if `AppleWin.exe` is still running the link fails with
+> LNK1104 — stop it first.
 
 ---
 
-## 8. 存檔（Save State）
+## 8. Save state
 
-- `SaveSnapshot` 保存 128 KB VRAM 與全部 VERA IO/Composer/Layer 暫存器。
-- `LoadSnapshot` 先 `Reset(false)` 再還原 VRAM 與暫存器。
-- 快照單位版本 `kUNIT_VERSION = 1`。
+- `SaveSnapshot` saves the 128 KB VRAM and all VERA IO/Composer/Layer registers.
+- `LoadSnapshot` calls `Reset(false)` first, then restores the VRAM and registers.
+- Snapshot unit version `kUNIT_VERSION = 1`.
 
 ---
 
-## 9. 已知限制
+## 9. Known limitations
 
-- **SD 卡未實作**（SPI 區 `$9F3E/$9F3F`）。
-- VERA 幀率以 Apple 幀率驅動（約 1 幀 / Apple 幀），與真實 59.5 fps 有
-  ~0.8% 差異，實務上不可察覺。
-- 每幀完整一幀的推進方式使 VSYNC/LINE IRQ 在同一時刻觸發，中線光柵特效
-  時序不精確（對多數軟體無影響）。
+- **SD card not implemented** (SPI area `$9F3E/$9F3F`).
+- The VERA frame rate is driven by the Apple frame rate (~1 frame / Apple
+  frame), which differs from the real 59.5 fps by ~0.8% — imperceptible in
+  practice.
+- The one-full-frame-per-frame advance causes VSYNC/LINE IRQs to fire at the
+  same instant; midline raster-effect timing is imprecise (no impact on most
+  software).

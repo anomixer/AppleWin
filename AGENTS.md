@@ -16,18 +16,33 @@ and an IRQ line. The core is a C++ port of `apple2ts`'s TypeScript VERA
 
 ## Build workflow
 
-MSBuild (Visual Studio 2022) is used from the command line:
+MSBuild (Visual Studio 2022) is used from the command line. **Always build via
+the solution** (`AppleWin-VS2022.sln`), not the individual `.vcxproj` — the
+solution resolves the `TestCPU6502` dependency ordering for both Win32 and x64.
 
 ```powershell
 $msbuild = "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe"
-& $msbuild "AppleWin-VS2022.vcxproj" /p:Configuration=Debug   /p:Platform=Win32 /v:normal /nologo
-& $msbuild "AppleWin-VS2022.vcxproj" /p:Configuration=Release /p:Platform=Win32 /v:normal /nologo
+# Win32 (x86) Release  ->  Release\AppleWin.exe
+& $msbuild "AppleWin-VS2022.sln" /p:Configuration=Release /p:Platform=Win32 /v:minimal /nologo
+# x64 Release         ->  x64\Release\AppleWin-x64.exe
+& $msbuild "AppleWin-VS2022.sln" /p:Configuration=Release /p:Platform=x64   /v:minimal /nologo
 ```
+
+The project already defines both platforms (`Release|Win32` and `Release|x64`);
+the x64 configuration sets `TargetName = AppleWin-x64`, so the two builds
+produce `Release\AppleWin.exe` and `x64\Release\AppleWin-x64.exe` without
+colliding. Debug builds are likewise `Debug\AppleWin.exe` and
+`x64\Debug\AppleWin-x64.exe`.
 
 Gotchas:
 
 - **Build single-threaded.** The `/m` (parallel) flag has produced transient
   "Build FAILED" with **0 errors** — run without `/m` for reliable results.
+- **Build via the solution, not the vcxproj.** Building `AppleWin-VS2022.vcxproj`
+  alone for x64 fails: its `PreBuildEvent` runs `$(OutDir)TestCPU6502.exe`,
+  which isn't built yet for the x64 platform (the x64 `OutDir` is
+  `x64\Release\`, and `TestCPU6502.exe` only exists there once the solution
+  builds it first). The solution handles the ordering.
 - **LNK1104 / locked exe.** If `Release\AppleWin.exe` (or `Debug\...`) is
   still running, the link fails with `LNK1104: cannot open ... AppleWin.exe`.
   Kill it first:

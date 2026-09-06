@@ -511,6 +511,21 @@ void Win32Frame::DrawFrameWindow (bool bPaintingWindow/*=false*/)
 
 			int res = FillRect(dc, &rect, btnfacebrush);
 		}
+
+		// Fill the remainder of the right button column down to the client bottom.
+		// VERA makes the viewport taller (480 vs 384), so the button column and
+		// status area no longer reach the window bottom, leaving a black strip.
+		// Fill it with the button-face colour instead of the window's black brush.
+		{
+			RECT client;
+			GetClientRect(g_hFrameWindow, &client);
+			const int statusBottom = buttony + BUTTONS * BUTTONCY + 1 + 34;	// bottom of status area
+			if (client.bottom > statusBottom)
+			{
+				RECT fillRect = { buttonx, statusBottom, buttonx + BUTTONCX + 2, client.bottom };
+				FillRect(dc, &fillRect, btnfacebrush);
+			}
+		}
 	}
 
 	// DRAW THE STATUS AREA

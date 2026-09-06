@@ -115,14 +115,17 @@ void LogFileOutput(const char* format, ...)
 
 // Write to VERA.log next to the exe (always findable). Independent of the
 // global AppleWin.log which opens in the CWD and only exists with -log.
-// Debug-only: Release builds must not leave a stray VERA.log (like upstream's
-// LOG macro, which is #ifdef _DEBUG). In Release this is a no-op.
+// Debug builds always write; Release builds write only when -log was passed
+// (g_fh is set), so a normal Release run never leaves a stray VERA.log.
 void LogWriteVERALog(const char* format, ...)
 {
 #ifndef _DEBUG
-	(void)format;
-	return;
-#else
+	if (!g_fh)	// Release: only write VERA.log when logging was explicitly enabled via -log
+	{
+		(void)format;
+		return;
+	}
+#endif
 	char path[_MAX_PATH];
 	if (GetModuleFileNameA(NULL, path, _MAX_PATH) <= 0)
 		return;
@@ -137,5 +140,4 @@ void LogWriteVERALog(const char* format, ...)
 	vfprintf(f, format, args);
 	va_end(args);
 	fclose(f);
-#endif
 }

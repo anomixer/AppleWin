@@ -23,10 +23,10 @@ core is a C++ port of `apple2ts`'s TypeScript implementation
   - `VERAAudio.h/.cpp` — audio core (PSG + PCM)
   - `VERACard.h/.cpp` — slot-card integration, IO, Update, audio buffer, save-state
 
-### Not yet implemented
+### Implementation status
 
-- **SD card** (SPI registers `$9F3E/$9F3F` are currently no-ops) — deferred.
 - Full VERA audio is done (16-channel PSG + PCM implemented).
+- The SD card SPI (SD/MMC) is implemented — see §4 "SD card SPI".
 
 ---
 
@@ -125,7 +125,7 @@ VERA registers are selected by `addr & 0x1F` (`VERAVideo::Write/Read`).
 | 0x0D–0x13 | Layer 0 registers (7 bytes) |
 | 0x14–0x1A | Layer 1 registers (7 bytes) |
 | 0x1B–0x1D | PCM (0x1B control, 0x1C rate, 0x1D FIFO write) |
-| 0x1E–0x1F | SPI (SD card, not implemented) |
+| 0x1E–0x1F | SD card SPI: 0x1E = SD_DATA, 0x1F = SD_STATUS |
 
 ### Composer (DCSEL=0, offset into `m_reg_composer`)
 
@@ -153,6 +153,38 @@ VERA registers are selected by `addr & 0x1F` (`VERAVideo::Write/Read`).
 | 4 | HSCROLL high 4 bits (`& 0xF`) |
 | 5 | VSCROLL low 8 bits |
 | 6 | VSCROLL high 4 bits (`& 0xF`) |
+
+### SD card SPI
+
+`VERASD.h/.cpp` implements an SD/MMC **SPI state machine** (port of apple2ts
+`src/worker/devices/vera/sdcard.ts`). The backing store is a raw
+512-byte-block image opened with real stdio (`fopen("r+b")` / `fseek` /
+`fread` / `fwrite`).
+
+**Registers** (slot region, `addr & 0x1F`; slot 2 → `$C21E`/`$C21F`):
+
+| reg | name | function |
+|---|---|---|
+| 0x1E | SD_DATA | write sends a byte (starts a transfer); read returns the received byte; with autotx enabled a read auto-sends `$FF` |
+| 0x1F | SD_STATUS | bit 0 = SD_SEL (card selected / CS), bit 2 = SD_AUTOTX, bit 7 = SD_BUSY (a byte transfer is in progress) |
+
+**SPI timing:** `SPI_CLOCK_RATE_MHZ = 12`. `SpiStep(clocks)` adds `clocks * 12`
+to a busy counter, and a byte completes once it reaches `>= 10` (~1 CPU cycle
+per byte in emulation). `VERACard::Update()` calls `m_video.StepSPI(...)` each
+1 ms batch — the SPI only advances at batch boundaries, so a guest program must
+**poll SD_STATUS bit 7**, not use a fixed delay, to wait for a transfer.
+
+**Commands** (SPI mode): CMD0, CMD8, CMD9 (SEND_CSD), ACMD41 (CMD55+CMD41),
+CMD12, CMD13, CMD16, CMD17, CMD18, CMD24 (write), CMD55, CMD58 (READ_OCR).
+
+**Mount / GUI:** `Configuration -> Slots` → select VERA → "Configure..." opens
+the `IDD_VERA_SD_CARD` "VERA SD Card" dialog (`PageSlots.cpp`) with
+"Select Image..." / "Unmount". `VERACard::SetSDImagePath()` mounts the image
+and persists the path to the registry (per-slot section,
+`REGVALUE_VERA_SD_IMAGE` = "SD Card Image"); `UnmountSD()` clears it. The
+constructor restores the persisted image via `GetSDImagePathFromRegistry()`.
+`VERACard::Update()` also runs a one-time `TestSDRead()` self-test (reads
+LBA 2048 and logs the FAT32 boot signature to `VERA.log`).
 
 ---
 
@@ -202,6 +234,14 @@ Release\AppleWin.exe -s2 vera -s7 hdc -h1 "C:\dev\Time-Pilot\TimePilot-IIvera\Ti
 
 Select the VERA card (`CT_VERA`) in the "Slot" settings page dropdown.
 
+### Mount an SD image (SD card SPI)
+
+With the VERA card installed, open `Configuration -> Slots` and press
+"Configure..." for the VERA card. The "VERA SD Card" dialog lets you
+**Select Image...** (a raw 512-byte-block image, e.g. a FAT32 `.img`) or
+**Unmount**. The selected image is mounted as the VERA SD card and the path is
+persisted to the registry (per-slot), so it is restored on the next launch.
+
 ---
 
 ## 7. Build and run
@@ -227,7 +267,6 @@ $msbuild = "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Curr
 
 ## 9. Known limitations
 
-- **SD card not implemented** (SPI area `$9F3E/$9F3F`).
 - The VERA frame rate is driven by the Apple frame rate (~1 frame / Apple
   frame), which differs from the real 59.5 fps by ~0.8% — imperceptible in
   practice.

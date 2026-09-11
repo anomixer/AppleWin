@@ -82,10 +82,13 @@ detected via the monotonic cumulative cycle counter `g_nCumulativeCycles`
 Files in `source\VERACard\`:
 
 - `VERACard.h/.cpp` — slot-card glue: IO handlers, `Update()`, audio buffer
-  management, save-state.
+  management, save-state, SD-image registry persistence.
 - `VERAVideo.h/.cpp` — the video core: `Step()` (scanline advance),
   `render_line()`, layers, sprites, palette, FX registers, IRQ.
 - `VERAAudio.h/.cpp` — PSG (16 ch) + PCM FIFO mixer, `Render(buf, nSamples)`.
+- `VERASD.h/.cpp` — SD/MMC SPI protocol emulation (port of apple2ts
+  `src/worker/devices/vera/sdcard.ts`), speaking through VERA `$9F3E/$9F3F`.
+  Uses real stdio for the backing raw 512-byte-block image.
 
 Key integration points:
 
@@ -98,6 +101,36 @@ Key integration points:
   and a slot drop-down entry (`CT_VERA` in `source\Card.h`).
 - **CmdLine**: `-s<slot> vera` selects the card; hard disk image args are
   `-h1/-h2` for slot 7 (`source\CmdLine.cpp`).
+
+### SD card (VERA SPI SD)
+
+`VERASD.h/.cpp` is an SD/MMC **SPI state machine** (port of apple2ts
+`src/worker/devices/vera/sdcard.ts`). The backing store is a raw
+512-byte-block image opened with real stdio (`fopen("r+b")` / `fseek` /
+`fread` / `fwrite`).
+
+- **Registers** (slot region, `addr & 0x1F`; slot 2 → `$C21E`/`$C21F`):
+  - `$Cs1E` (reg 0x1E) — SD_DATA: write sends a byte (starts a transfer),
+    read returns the received byte; with autotx enabled a read auto-sends `$FF`.
+  - `$Cs1F` (reg 0x1F) — SD_STATUS: bit 0 = SD_SEL (card selected / CS),
+    bit 2 = SD_AUTOTX, bit 7 = SD_BUSY (a byte transfer is in progress).
+- **SPI timing**: `SPI_CLOCK_RATE_MHZ = 12`; `SpiStep(clocks)` adds
+  `clocks * 12` to a busy counter, and a byte completes once it reaches `>= 10`
+  (~1 CPU cycle per byte in emulation). `VERACard::Update()` calls
+  `m_video.StepSPI(nExecutedCycles)` each 1 ms batch — the SPI only advances at
+  batch boundaries, so a guest program must **poll SD_STATUS bit 7**, not use a
+  fixed delay, to wait for a transfer.
+- **Commands** (SPI mode): CMD0, CMD8, CMD9 (SEND_CSD), ACMD41 (CMD55+CMD41),
+  CMD12, CMD13, CMD16, CMD17, CMD18, CMD24 (write), CMD55, CMD58 (READ_OCR).
+- **Mount / GUI**: `Configuration -> Slots` → select VERA → "Configure..."
+  opens the `IDD_VERA_SD_CARD` "VERA SD Card" dialog (`PageSlots.cpp`) with
+  "Select Image..." / "Unmount". `VERACard::SetSDImagePath()` mounts the image
+  and persists the path to the registry (per-slot section,
+  `REGVALUE_VERA_SD_IMAGE` = "SD Card Image"); `UnmountSD()` clears it. The
+  constructor restores the persisted image via `GetSDImagePathFromRegistry()`.
+- **Self-test**: `VERACard::Update()` runs `TestSDRead()` once after an image
+  is mounted — reads LBA 2048 through the SPI and logs the FAT32 boot
+  signature to `VERA.log`.
 
 ### Display / framebuffer model
 

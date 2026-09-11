@@ -20,10 +20,10 @@ C++ 移植。
   - `VERAAudio.h/.cpp` — 音效核心（PSG + PCM）
   - `VERACard.h/.cpp` — 插槽卡整合、IO、Update、音效緩衝、存檔
 
-### 尚未實作
+### 實作狀態
 
-- **SD 卡**（SPI 暫存器 `$9F3E/$9F3F` 目前為空操作）已決定延期。
-- 完整 VERA 音效（PSG 已實作 16 通道 + PCM）。
+- 完整 VERA 音效已完成（PSG 已實作 16 通道 + PCM）。
+- SD 卡 SPI（SD/MMC）已實作 — 見 §4「SD 卡 SPI」。
 
 ---
 
@@ -116,7 +116,7 @@ VERA 暫存器由 `addr & 0x1F` 選定（`VERAVideo::Write/Read`）。
 | 0x0D–0x13 | Layer 0 暫存器（7 bytes） |
 | 0x14–0x1A | Layer 1 暫存器（7 bytes） |
 | 0x1B–0x1D | PCM（0x1B 控制、0x1C 速率、0x1D FIFO 寫入） |
-| 0x1E–0x1F | SPI（SD 卡，目前未實作） |
+| 0x1E–0x1F | SD 卡 SPI：0x1E = SD_DATA、0x1F = SD_STATUS |
 
 ### Composer（DCSEL=0，offset 進入 `m_reg_composer`）
 
@@ -144,6 +144,36 @@ VERA 暫存器由 `addr & 0x1F` 選定（`VERAVideo::Write/Read`）。
 | 4 | HSCROLL 高 4 bits（`& 0xF`） |
 | 5 | VSCROLL 低 8 bits |
 | 6 | VSCROLL 高 4 bits（`& 0xF`） |
+
+### SD 卡 SPI
+
+`VERASD.h/.cpp` 實作 SD/MMC **SPI 狀態機**（apple2ts `src/worker/devices/vera/sdcard.ts`
+的移植）。底層儲存為原始 512-byte-block 影像，用真實 stdio 開啟
+（`fopen("r+b")` / `fseek` / `fread` / `fwrite`）。
+
+**暫存器**（插槽區，`addr & 0x1F`；slot 2 → `$C21E`/`$C21F`）：
+
+| reg | 名稱 | 功能 |
+|---|---|---|
+| 0x1E | SD_DATA | 寫入即送出一個 byte（開始傳輸）；讀取回傳收到的 byte；autotx 開啟時讀取會自動送出 `$FF` |
+| 0x1F | SD_STATUS | bit 0 = SD_SEL（卡片選定 / CS）、bit 2 = SD_AUTOTX、bit 7 = SD_BUSY（byte 傳輸進行中） |
+
+**SPI 時序：** `SPI_CLOCK_RATE_MHZ = 12`。`SpiStep(clocks)` 把 `clocks * 12`
+加進 busy 計數器，累積到 `>= 10` 即完成一個 byte（模擬中約 1 CPU 週期完成一個
+byte）。`VERACard::Update()` 每個 1 ms 批次呼叫 `m_video.StepSPI(...)` —
+SPI 只在批次邊界推進，所以 guest 程式要等傳輸完成，必須 **poll SD_STATUS bit 7**，
+不能用固定延遲。
+
+**支援指令**（SPI 模式）：CMD0、CMD8、CMD9（SEND_CSD）、ACMD41（CMD55+CMD41）、
+CMD12、CMD13、CMD16、CMD17、CMD18、CMD24（寫入）、CMD55、CMD58（READ_OCR）。
+
+**掛載 / GUI：** `Configuration -> Slots` → 選 VERA 卡 → 「Configure...」開啟
+`IDD_VERA_SD_CARD`「VERA SD Card」對話框（`PageSlots.cpp`），有「Select Image...」
+與「Unmount」。`VERACard::SetSDImagePath()` 掛載影像並把路徑存到 registry
+（每 slot 區段，`REGVALUE_VERA_SD_IMAGE` = "SD Card Image"）；`UnmountSD()`
+清除。建構子用 `GetSDImagePathFromRegistry()` 還原已存的路徑。
+`VERACard::Update()` 也會執行一次 `TestSDRead()` 自我測試（讀 LBA 2048，
+把 FAT32 開機簽名寫入 `VERA.log`）。
 
 ---
 
@@ -191,6 +221,13 @@ Release\AppleWin.exe -s2 vera -s7 hdc -h1 "C:\dev\Time-Pilot\TimePilot-IIvera\Ti
 
 在「Slot」設定頁的下拉選單中選擇 VERA 卡（`CT_VERA`）即可。
 
+### 掛載 SD 影像（SD 卡 SPI）
+
+裝好 VERA 卡後，開啟 `Configuration -> Slots`，對 VERA 卡按「Configure...」。
+「VERA SD Card」對話框可讓你 **Select Image...**（原始 512-byte-block 影像，
+例如 FAT32 `.img`）或 **Unmount**。選取的影像會掛載為 VERA SD 卡，路徑會存到
+registry（每 slot），下次啟動自動還原。
+
 ---
 
 ## 7. 建置與執行
@@ -215,7 +252,6 @@ $msbuild = "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Curr
 
 ## 9. 已知限制
 
-- **SD 卡未實作**（SPI 區 `$9F3E/$9F3F`）。
 - VERA 幀率以 Apple 幀率驅動（約 1 幀 / Apple 幀），與真實 59.5 fps 有
   ~0.8% 差異，實務上不可察覺。
 - 每幀完整一幀的推進方式使 VSYNC/LINE IRQ 在同一時刻觸發，中線光柵特效

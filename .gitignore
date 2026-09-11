@@ -183,3 +183,14 @@ UpgradeLog*.htm
 
 # Microsoft Fakes
 FakesAssemblies/
+
+# VERA SD test tool (verasdview) artifacts
+verasdview/*.bin
+verasdview/*.bmp
+verasdview/*.png
+verasdview/test_asm*.mjs
+
+# VERA SD debug / release artifacts
+test_out.txt
+AppleWin1.32.0.0-vera.zip
+AppleWin1.32.0.0-vera/

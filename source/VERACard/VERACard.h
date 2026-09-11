@@ -42,6 +42,18 @@ public:
 	// True when VERA video output is enabled (used by Video to decide display override)
 	bool IsActive() const { return m_video.IsVideoOutputEnabled(); }
 
+	// SD card mount/unmount (drives the VERA SPI SD image).
+	// SetSDImagePath also persists the path to the registry (per-slot).
+	void SetSDImagePath(const std::string& path);
+	void UnmountSD();
+	bool IsSDMounted() const { return m_video.IsSDMounted(); }
+	// Read the persisted SD image path from the registry (empty if none).
+	std::string GetSDImagePathFromRegistry() const;
+
+	// Self-test: read block 0 (and the FAT32 boot signature) through the SPI,
+	// logging the result to VERA.log. Returns true if the SPI read succeeds.
+	bool TestSDRead();
+
 	static const std::string& GetSnapshotCardName();
 
 	// Display: called when a new frame is ready. Copies VERA framebuffer into the
@@ -59,6 +71,7 @@ private:
 	static const UINT kDSBufferByteSize = 44100 / 60 * 3 * 2 * kNumChannels;	// ~3 frames of stereo samples (~50 ms)
 
 	ULONG m_lastVideoUpdateCycle;
+	bool m_bSDTested;	// SD self-test done once after mount
 	uint64_t m_lastFrameCycles;	// cumulative cycle count when the last full VERA frame was advanced
 	ULONGLONG m_lastSoundTick;	// real-time ms when UpdateSound last ran (stall detection)
 	uint32_t m_byteOffset;

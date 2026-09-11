@@ -143,6 +143,7 @@
     <ClInclude Include="Source\VERACard\VERACard.h" />
     <ClInclude Include="Source\VERACard\VERAAudio.h" />
     <ClInclude Include="Source\VERACard\VERAVideo.h" />
+    <ClInclude Include="Source\VERACard\VERASD.h" />
     <ClInclude Include="source\W5100.h" />
     <ClInclude Include="source\Windows\AppleWin.h" />
     <ClInclude Include="source\Windows\DirectInput.h" />
@@ -279,6 +280,9 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="Source\VERACard\VERAVideo.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Source\VERACard\VERASD.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="source\Windows\AppleWin.cpp" />

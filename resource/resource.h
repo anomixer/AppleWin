@@ -75,6 +75,10 @@
 #define IDD_RAMWORKS3                   172
 #define IDD_SATURN                      174
 #define IDD_MOCKINGBOARD                175
+#define IDD_VERA_SD_CARD                176
+#define IDC_SLOT_OPT_VERA_SD_IMAGE      1150
+#define IDC_SLOT_OPT_VERA_SD_SELECT     1151
+#define IDC_SLOT_OPT_VERA_SD_UNMOUNT    1152
 #define IDC_KEYB_BUFFER_ENABLE          1005
 #define IDC_SAVESTATE                   1006
 #define IDC_SAVESTATE_ON_EXIT           1007

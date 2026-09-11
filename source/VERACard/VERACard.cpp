@@ -17,6 +17,7 @@
 #include "Log.h"
 #include "Memory.h"
 #include "NTSC.h"
+#include "Registry.h"
 #include "Video.h"
 #include "YamlHelper.h"
 
@@ -35,6 +36,7 @@ const std::string& VERACard::GetSnapshotCardName()
 VERACard::VERACard(UINT slot)
 	: Card(CT_VERA, slot)
 	, m_lastVideoUpdateCycle(0)
+	, m_bSDTested(false)
 	, m_lastFrameCycles(0)
 	, m_lastSoundTick(0)
 	, m_byteOffset((uint32_t)-1)
@@ -52,6 +54,60 @@ VERACard::VERACard(UINT slot)
 
 	// Request the larger (VERA-sized) framebuffer from the Video subsystem.
 	GetVideo().SetVidVERA(true);
+
+	// Restore the persisted SD image (if any) for this slot.
+	const std::string sdPath = GetSDImagePathFromRegistry();
+	if (!sdPath.empty())
+		m_video.SetSDImagePath(sdPath);
+}
+
+void VERACard::SetSDImagePath(const std::string& path)
+{
+	// Mount the image and persist the path to the registry for this slot.
+	m_video.SetSDImagePath(path);
+
+	const std::string regSection = RegGetConfigSlotSection(m_slot);
+	RegSaveString(regSection.c_str(), REGVALUE_VERA_SD_IMAGE, true, path);
+}
+
+void VERACard::UnmountSD()
+{
+	m_video.UnmountSD();
+
+	const std::string regSection = RegGetConfigSlotSection(m_slot);
+	RegSaveString(regSection.c_str(), REGVALUE_VERA_SD_IMAGE, true, "");	// clear
+}
+
+std::string VERACard::GetSDImagePathFromRegistry() const
+{
+	const std::string regSection = RegGetConfigSlotSection(m_slot);
+	char path[MAX_PATH] = {};
+	if (RegLoadString(regSection.c_str(), REGVALUE_VERA_SD_IMAGE, true, path, MAX_PATH))
+		return std::string(path);
+	return std::string();
+}
+
+bool VERACard::TestSDRead()
+{
+	if (!m_video.IsSDMounted())
+	{
+		LogWriteVERALog("VERA SD: no SD image mounted\n");
+		return false;
+	}
+
+	uint8_t boot[512];
+	bool ok = m_video.TestSDReadBlock(2048, boot);
+	if (!ok)
+	{
+		LogWriteVERALog("VERA SD: read block 0 FAILED\n");
+		return false;
+	}
+
+	const bool fatSig = (boot[510] == 0x55 && boot[511] == 0xAA);
+	const bool fat32 = fatSig && (boot[11] == 0 && boot[16] != 0);	// FAT32 has 0 root entries
+	LogWriteVERALog("VERA SD: read block 0 OK (boot sig %s, FAT32=%s)\n",
+		fatSig ? "55AA present" : "missing", fat32 ? "yes" : "no");
+	return true;
 }
 
 VERACard::~VERACard()
@@ -87,7 +143,17 @@ void VERACard::Reset(const bool powerCycle)
 
 void VERACard::Update(const ULONG nExecutedCycles)
 {
-	(void)nExecutedCycles;
+	// One-time SD self-test once an SD image is mounted (logs to VERA.log so
+	// a user can confirm the VERA SPI SD read works from the emulator).
+	if (!m_bSDTested && m_video.IsSDMounted())
+	{
+		m_bSDTested = true;
+		TestSDRead();
+	}
+
+	// Advance the SD card SPI timing by the CPU cycles executed in this batch
+	// (mirrors apple2ts's vera_spi_step(cycleDelta) in the cycle-count callback).
+	m_video.StepSPI((int)nExecutedCycles);
 
 	// Clear the framebuffer once when VERA first becomes active, so leftover
 	// Apple II / border pixels don't show through.

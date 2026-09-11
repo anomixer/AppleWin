@@ -134,6 +134,7 @@ enum AppMode_e
 #define REGVALUE_MOCKINGBOARD_SC01 "SC01"
 #define REGVALUE_DISKII_13_SECTOR_FIRMWARE "13-sector Firmware"
 #define REGVALUE_HDC_FIRMWARE "Firmware"
+#define REGVALUE_VERA_SD_IMAGE "SD Card Image"
 
 // Preferences 
 #define REG_PREFS                              "Preferences"

@@ -9,6 +9,8 @@
 */
 #include "VERAVideo.h"
 
+#include "VERASD.h"	// SD card SPI (included via header, but explicit for clarity)
+
 #include <climits>
 #include <cmath>
 #include <cstring>
@@ -1338,7 +1340,7 @@ uint8_t VERAVideo::Read(uint8_t reg, bool debugOn)
 	case 0x1B: return m_pAudio ? m_pAudio->ReadPcmCtrl() : 0;
 	case 0x1C: return m_pAudio ? m_pAudio->ReadPcmRate() : 0;
 	case 0x1D: return 0;
-	case 0x1E: case 0x1F: return 0xff;	// SPI: no SD card yet (returns idle)
+	case 0x1E: case 0x1F: return m_sd.SpiRead(reg & 1);	// SD card SPI
 	}
 	return 0;
 }
@@ -1641,7 +1643,7 @@ void VERAVideo::Write(uint8_t reg, uint8_t value)
 	case 0x1B: write_pcm(0, value); break;
 	case 0x1C: write_pcm(1, value); break;
 	case 0x1D: write_pcm(2, value); break;
-	case 0x1E: case 0x1F: break;	// SPI: no SD card yet
+	case 0x1E: case 0x1F: m_sd.SpiWrite(reg & 1, value); break;	// SD card SPI
 	}
 }
 

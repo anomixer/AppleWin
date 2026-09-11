@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "VERAAudio.h"	// For PSG/PCM integration hooks
+#include "VERASD.h"		// For VERA SD card SPI (SD/MMC) integration
 
 class VERAVideo
 {
@@ -33,6 +34,9 @@ public:
 	uint8_t Read(uint8_t reg, bool debugOn);
 	void Write(uint8_t reg, uint8_t value);
 
+	// Advance the SD card SPI timing by 'clocks' CPU cycles.
+	void StepSPI(int clocks) { m_sd.SpiStep(clocks); }
+
 	uint8_t* GetFramebuffer() { return m_framebuffer.data(); }
 	int GetFramebufferWidth() const { return SCREEN_WIDTH; }
 	int GetFramebufferHeight() const { return SCREEN_HEIGHT; }
@@ -43,6 +47,12 @@ public:
 	uint32_t GetVideoRAMAddrMask() const { return 0x1FFFF; }
 
 	void SetAudio(VERAAudio* pAudio) { m_pAudio = pAudio; }
+
+	// SD card SPI ($9F3E/$9F3F)
+	void SetSDImagePath(const std::string& path) { m_sd.SetPath(path); }
+	void UnmountSD() { m_sd.Unmount(); }
+	bool IsSDMounted() const { return m_sd.IsMounted(); }
+	bool TestSDReadBlock(uint32_t lba, uint8_t* dest512) { return m_sd.TestReadBlock(lba, dest512); }
 
 	// Register-state serialization for save-state (fixed-size byte buffer).
 	static unsigned int GetRegisterStateSize();
@@ -248,4 +258,6 @@ private:
 
 	// Audio hook
 	VERAAudio* m_pAudio;
+	// SD card SPI
+	VERASD m_sd;
 };

@@ -39,6 +39,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "../Uthernet2.h"
 #include "../Tfe/PCapBackend.h"
 #include "../Windows/Win32Frame.h"
+#include "../VERACard/VERACard.h"	// For VERA SD card mount sub-dialog
 
 CPageSlots* CPageSlots::ms_this = nullptr;	// reinit'd in ctor
 UINT CPageSlots::ms_slot = 0;
@@ -205,6 +206,10 @@ INT_PTR CPageSlots::DlgProcInternal(HWND hWnd, UINT message, WPARAM wparam, LPAR
 				{
 					DialogBox(GetFrame().g_hInstance, (LPCTSTR)IDD_MOCKINGBOARD, hWnd, CPageSlots::DlgProcMockingboard);
 				}
+				else if (cardInSlot == CT_VERA)
+				{
+					DialogBox(GetFrame().g_hInstance, (LPCTSTR)IDD_VERA_SD_CARD, hWnd, CPageSlots::DlgProcVERA);
+				}
 			}
 			break;
 
@@ -278,6 +283,7 @@ bool CPageSlots::CardTypeHasOptions(SS_CARDTYPE card)
 	case CT_Uthernet:
 	case CT_Uthernet2:
 	case CT_RamWorksIII:
+	case CT_VERA:
 		return true;
 	default:
 		break;
@@ -1472,4 +1478,96 @@ void CPageSlots::ConfigResetRamWorks()
 	{
 		configNew.m_RamWorksMemorySize = kDefaultExMemoryBanksRealRW3;
 	}
+}
+
+INT_PTR CALLBACK CPageSlots::DlgProcVERA(HWND hWnd, UINT message, WPARAM wparam, LPARAM lparam)
+{
+	// Switch from static func to our instance
+	return CPageSlots::ms_this->DlgProcVERAInternal(hWnd, message, wparam, lparam);
+}
+
+INT_PTR CPageSlots::DlgProcVERAInternal(HWND hWnd, UINT message, WPARAM wparam, LPARAM lparam)
+{
+	switch (message)
+	{
+	case WM_COMMAND:
+		switch (LOWORD(wparam))
+		{
+		case IDC_SLOT_OPT_VERA_SD_SELECT:
+		{
+			VERACard& card = dynamic_cast<VERACard&>(GetCardMgr().GetRef(ms_slot));
+			std::string pathname = UserSelectSDImage(hWnd);
+			if (!pathname.empty())
+			{
+				card.SetSDImagePath(pathname);
+				SetDlgItemText(hWnd, IDC_SLOT_OPT_VERA_SD_IMAGE, pathname.c_str());
+			}
+		}
+		break;
+
+		case IDC_SLOT_OPT_VERA_SD_UNMOUNT:
+		{
+			VERACard& card = dynamic_cast<VERACard&>(GetCardMgr().GetRef(ms_slot));
+			card.UnmountSD();
+			SetDlgItemText(hWnd, IDC_SLOT_OPT_VERA_SD_IMAGE, "");
+		}
+		break;
+
+		case IDOK:
+			EndDialog(hWnd, 0);
+			break;
+
+		case IDCANCEL:
+			EndDialog(hWnd, 0);
+			break;
+
+		default:
+			return FALSE;
+		}
+		break;
+
+	case WM_CLOSE:
+		EndDialog(hWnd, 0);
+		break;
+
+	case WM_INITDIALOG:
+	{
+		const VERACard& card = dynamic_cast<VERACard&>(GetCardMgr().GetRef(ms_slot));
+		const std::string path = card.GetSDImagePathFromRegistry();
+		SetDlgItemText(hWnd, IDC_SLOT_OPT_VERA_SD_IMAGE, path.c_str());
+	}
+	break;
+
+	default:
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+std::string CPageSlots::UserSelectSDImage(HWND hWnd)
+{
+	char directory[MAX_PATH] = {};
+	char filename[MAX_PATH] = {};
+
+	RegLoadString(REG_PREFS, REGVALUE_PREF_HDV_START_DIR, true, directory, MAX_PATH, "");
+	std::string title = "Select VERA SD Card Image";
+
+	OPENFILENAME ofn;
+	memset(&ofn, 0, sizeof(OPENFILENAME));
+	ofn.lStructSize = sizeof(OPENFILENAME);
+	ofn.hwndOwner = GetFrame().g_hFrameWindow;
+	ofn.hInstance = GetFrame().g_hInstance;
+	ofn.lpstrFilter = "SD Card Images (*.img,*.bin,*.sd,*.iso)\0*.img;*.bin;*.sd;*.iso\0"
+		"All Files\0*.*\0";
+	ofn.lpstrFile = filename;
+	ofn.nMaxFile = MAX_PATH;
+	ofn.lpstrInitialDir = directory;
+	ofn.Flags = OFN_FILEMUSTEXIST | OFN_HIDEREADONLY;
+	ofn.lpstrTitle = title.c_str();
+
+	if (!GetOpenFileName(&ofn))
+		return std::string();
+
+	return std::string(filename);
 }

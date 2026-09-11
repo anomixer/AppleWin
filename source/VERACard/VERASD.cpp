@@ -131,7 +131,10 @@ bool VERASD::WriteBlock(uint32_t lba, const uint8_t* src512)
 {
 	if (!SeekBlock(lba))
 		return false;
-	return fwrite(src512, 1, 512, m_sdcard_file) == 512;
+	if (fwrite(src512, 1, 512, m_sdcard_file) != 512)
+		return false;
+	fflush(m_sdcard_file);	// persist immediately (SD card write semantics)
+	return true;
 }
 
 // ---------------------------------------------------------------------------

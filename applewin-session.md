@@ -44,6 +44,9 @@ c1972253  VERA: add SD/MMC SPI SD card emulation + GUI mount + docs
 
 SD/MMC SPI 功能已實作並 commit（`VERASD.h/.cpp`、`VERAVideo.cpp`/`VERACard.cpp` 整合、GUI mount、registry 持久化、`VERA.md`/`VERA_tw.md` 更新）。**技術細節一律見 `AGENTS.md` 的 `### SD card (VERA SPI SD)`**，此處不重複。
 
+> 後續（commit `70f9f5aa`）修復了「一次選 VERA + SD image 後重啟」的路徑被清空：
+> SD 路徑改存 `CConfigNeedingRestart::m_VERASDImagePath`，由 `ApplyConfigAfterClose` 在卡片重新插入後掛載，並解決了首次 empty slot 選 VERA 直接點 `...` 的 `Bad dynamic_cast!` 崩潰。詳見 `AGENTS.md`。
+
 ---
 
 ## 3. 未完成 / 待辦（按優先序）

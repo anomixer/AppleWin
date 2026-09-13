@@ -124,10 +124,21 @@ Key integration points:
   CMD12, CMD13, CMD16, CMD17, CMD18, CMD24 (write), CMD55, CMD58 (READ_OCR).
 - **Mount / GUI**: `Configuration -> Slots` → select VERA → "Configure..."
   opens the `IDD_VERA_SD_CARD` "VERA SD Card" dialog (`PageSlots.cpp`) with
-  "Select Image..." / "Unmount". `VERACard::SetSDImagePath()` mounts the image
-  and persists the path to the registry (per-slot section,
-  `REGVALUE_VERA_SD_IMAGE` = "SD Card Image"); `UnmountSD()` clears it. The
-  constructor restores the persisted image via `GetSDImagePathFromRegistry()`.
+  "Select Image..." / "Unmount". The dialog does **not** require the VERA card
+  to be installed yet — the selected path is stored in
+  `CConfigNeedingRestart::m_VERASDImagePath[slot]` (not the live card), so you
+  can pick VERA + SD image in one go and restart: `ApplyConfigAfterClose()`
+  mounts it via `VERACard::SetSDImagePath()` after the card is (re)inserted.
+  `SetSDImagePath()` mounts the image and persists the path to the registry
+  (per-slot section, `REGVALUE_VERA_SD_IMAGE` = "SD Card Image"); `UnmountSD()`
+  clears it. The constructor restores the persisted image via
+  `GetSDImagePathFromRegistry()`. The path is **not** part of the restart-detect
+  `operator==`, so changing only the SD image applies immediately without a
+  restart (mirrors the harddisk pattern).
+  > Note: `ApplyNewConfigForRestart` empties the slot before re-inserting it and
+  > `RegSetConfigSlotNewCardType` deletes the whole slot registry section, so
+  > storing the SD path only in the slot section (the old approach) made it
+  > disappear on restart — hence the config-based storage above.
 - **Self-test**: `VERACard::Update()` runs `TestSDRead()` once after an image
   is mounted — reads LBA 2048 through the SPI and logs the FAT32 boot
   signature to `VERA.log`.

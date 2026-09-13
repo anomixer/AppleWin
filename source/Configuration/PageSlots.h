@@ -90,6 +90,7 @@ private:
 
 	void ConfigResetDisk2(UINT slot);
 	void ConfigResetHarddisk(UINT slot);
+	void ConfigResetVERA(UINT slot);
 	void ConfigResetSSC(UINT slot);
 	void ConfigResetPrinter(UINT slot);
 	void ConfigResetMouseCard(UINT slot);

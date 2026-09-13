@@ -179,10 +179,15 @@ CMD12, CMD13, CMD16, CMD17, CMD18, CMD24 (write), CMD55, CMD58 (READ_OCR).
 
 **Mount / GUI:** `Configuration -> Slots` → select VERA → "Configure..." opens
 the `IDD_VERA_SD_CARD` "VERA SD Card" dialog (`PageSlots.cpp`) with
-"Select Image..." / "Unmount". `VERACard::SetSDImagePath()` mounts the image
-and persists the path to the registry (per-slot section,
+"Select Image..." / "Unmount". The dialog does **not** require the VERA card to
+be installed yet: the selected path is stored in
+`CConfigNeedingRestart::m_VERASDImagePath[slot]`, so you can pick VERA + SD
+image in one go and restart. `ApplyConfigAfterClose()` then mounts it via
+`VERACard::SetSDImagePath()` after the card is (re)inserted. `SetSDImagePath()`
+mounts the image and persists the path to the registry (per-slot section,
 `REGVALUE_VERA_SD_IMAGE` = "SD Card Image"); `UnmountSD()` clears it. The
 constructor restores the persisted image via `GetSDImagePathFromRegistry()`.
+Changing only the SD image applies immediately (no forced restart).
 `VERACard::Update()` also runs a one-time `TestSDRead()` self-test (reads
 LBA 2048 and logs the FAT32 boot signature to `VERA.log`).
 
@@ -236,11 +241,13 @@ Select the VERA card (`CT_VERA`) in the "Slot" settings page dropdown.
 
 ### Mount an SD image (SD card SPI)
 
-With the VERA card installed, open `Configuration -> Slots` and press
-"Configure..." for the VERA card. The "VERA SD Card" dialog lets you
-**Select Image...** (a raw 512-byte-block image, e.g. a FAT32 `.img`) or
-**Unmount**. The selected image is mounted as the VERA SD card and the path is
-persisted to the registry (per-slot), so it is restored on the next launch.
+Open `Configuration -> Slots`, select VERA (even if the slot was previously
+empty) and press "Configure..." for the VERA card. The "VERA SD Card" dialog
+lets you **Select Image...** (a raw 512-byte-block image, e.g. a FAT32 `.img`)
+or **Unmount**. The selected image is mounted as the VERA SD card and the path
+is persisted to the registry (per-slot), so it is restored on the next launch.
+You can select the VERA card and its SD image in one session and restart once —
+both take effect together.
 
 ---
 

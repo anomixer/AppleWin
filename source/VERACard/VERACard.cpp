@@ -63,28 +63,41 @@ VERACard::VERACard(UINT slot)
 
 void VERACard::SetSDImagePath(const std::string& path)
 {
-	// Mount the image and persist the path to the registry for this slot.
+	// Mount the image now, and persist the path to the registry for this slot.
 	m_video.SetSDImagePath(path);
-
-	const std::string regSection = RegGetConfigSlotSection(m_slot);
-	RegSaveString(regSection.c_str(), REGVALUE_VERA_SD_IMAGE, true, path);
+	SetSDImagePathInRegistry(m_slot, path);
 }
 
 void VERACard::UnmountSD()
 {
 	m_video.UnmountSD();
-
-	const std::string regSection = RegGetConfigSlotSection(m_slot);
-	RegSaveString(regSection.c_str(), REGVALUE_VERA_SD_IMAGE, true, "");	// clear
+	ClearSDImagePathInRegistry(m_slot);	// clear
 }
 
 std::string VERACard::GetSDImagePathFromRegistry() const
 {
-	const std::string regSection = RegGetConfigSlotSection(m_slot);
+	return GetSDImagePathFromRegistry(m_slot);
+}
+
+std::string VERACard::GetSDImagePathFromRegistry(UINT slot)
+{
+	const std::string regSection = RegGetConfigSlotSection(slot);
 	char path[MAX_PATH] = {};
 	if (RegLoadString(regSection.c_str(), REGVALUE_VERA_SD_IMAGE, true, path, MAX_PATH))
 		return std::string(path);
 	return std::string();
+}
+
+void VERACard::SetSDImagePathInRegistry(UINT slot, const std::string& path)
+{
+	const std::string regSection = RegGetConfigSlotSection(slot);
+	RegSaveString(regSection.c_str(), REGVALUE_VERA_SD_IMAGE, true, path);
+}
+
+void VERACard::ClearSDImagePathInRegistry(UINT slot)
+{
+	const std::string regSection = RegGetConfigSlotSection(slot);
+	RegSaveString(regSection.c_str(), REGVALUE_VERA_SD_IMAGE, true, "");	// clear
 }
 
 bool VERACard::TestSDRead()

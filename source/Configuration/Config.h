@@ -85,6 +85,7 @@ public:
 	SlotInfoForHDC m_slotInfoForHDC[NUM_SLOTS];
 	Disk2InterfaceCard m_disk2Card;				// For image selection and validation
 	HarddiskInterfaceCard m_harddiskCard;		// For image selection and validation
+	std::string m_VERASDImagePath[NUM_SLOTS];	// For VERA SD image selection and validation
 
 	// Advanced
 	UINT m_uSaveLoadStateMsg;	// WM_USER_LOADSTATE or WM_USER_SAVESTATE

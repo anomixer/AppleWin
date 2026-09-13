@@ -430,6 +430,25 @@ void CPageSlots::ApplyConfigAfterClose()
 		}
 	}
 
+	// VERA SD card
+	for (UINT slot = SLOT0; slot < NUM_SLOTS; slot++)
+	{
+		if (GetCardMgr().QuerySlot(slot) != CT_VERA)
+			continue;
+
+		VERACard& card = dynamic_cast<VERACard&>(GetCardMgr().GetRef(slot));
+		const std::string& pathname = m_PropertySheetHelper.GetConfigNew().m_VERASDImagePath[slot];
+
+		if (card.GetSDImagePathFromRegistry() == pathname)
+			continue;
+
+		// Mount the selected image (SetSDImagePath also persists it to the registry).
+		if (pathname.empty())
+			card.UnmountSD();
+		else
+			card.SetSDImagePath(pathname);
+	}
+
 	// SSC
 	// . do any non-restart config changes here (none at the moment)
 	// . (A change to SerialPortName requires a restart)
@@ -478,6 +497,7 @@ void CPageSlots::ResetCardOptionsToDefault(UINT slot)
 	{
 		ConfigResetDisk2(slot);
 		ConfigResetHarddisk(slot);
+		ConfigResetVERA(slot);
 		ConfigResetSSC(slot);
 		ConfigResetPrinter(slot);
 		ConfigResetMouseCard(slot);
@@ -978,6 +998,13 @@ void CPageSlots::ConfigResetHarddisk(UINT slot)
 		for (UINT i = HARDDISK_1; i < NUM_HARDDISKS; i++)
 			configNew.m_slotInfoForHDC[slot].pathname[i] = "";
 	}
+}
+
+void CPageSlots::ConfigResetVERA(UINT slot)
+{
+	CConfigNeedingRestart& configNew = m_PropertySheetHelper.GetConfigNew();
+	if (configNew.m_Slot[slot] == CT_VERA)
+		configNew.m_VERASDImagePath[slot] = "";
 }
 
 //===========================================================================
@@ -1495,11 +1522,13 @@ INT_PTR CPageSlots::DlgProcVERAInternal(HWND hWnd, UINT message, WPARAM wparam, 
 		{
 		case IDC_SLOT_OPT_VERA_SD_SELECT:
 		{
-			VERACard& card = dynamic_cast<VERACard&>(GetCardMgr().GetRef(ms_slot));
 			std::string pathname = UserSelectSDImage(hWnd);
 			if (!pathname.empty())
 			{
-				card.SetSDImagePath(pathname);
+				// Store the selection in the pending config; the image is mounted
+				// on the live card by ApplyConfigAfterClose (works whether or not
+				// the VERA card is installed yet).
+				m_PropertySheetHelper.GetConfigNew().m_VERASDImagePath[ms_slot] = pathname;
 				SetDlgItemText(hWnd, IDC_SLOT_OPT_VERA_SD_IMAGE, pathname.c_str());
 			}
 		}
@@ -1507,8 +1536,7 @@ INT_PTR CPageSlots::DlgProcVERAInternal(HWND hWnd, UINT message, WPARAM wparam, 
 
 		case IDC_SLOT_OPT_VERA_SD_UNMOUNT:
 		{
-			VERACard& card = dynamic_cast<VERACard&>(GetCardMgr().GetRef(ms_slot));
-			card.UnmountSD();
+			m_PropertySheetHelper.GetConfigNew().m_VERASDImagePath[ms_slot] = "";
 			SetDlgItemText(hWnd, IDC_SLOT_OPT_VERA_SD_IMAGE, "");
 		}
 		break;
@@ -1532,8 +1560,7 @@ INT_PTR CPageSlots::DlgProcVERAInternal(HWND hWnd, UINT message, WPARAM wparam, 
 
 	case WM_INITDIALOG:
 	{
-		const VERACard& card = dynamic_cast<VERACard&>(GetCardMgr().GetRef(ms_slot));
-		const std::string path = card.GetSDImagePathFromRegistry();
+		const std::string& path = m_PropertySheetHelper.GetConfigNew().m_VERASDImagePath[ms_slot];
 		SetDlgItemText(hWnd, IDC_SLOT_OPT_VERA_SD_IMAGE, path.c_str());
 	}
 	break;

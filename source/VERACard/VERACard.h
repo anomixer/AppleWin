@@ -50,6 +50,13 @@ public:
 	// Read the persisted SD image path from the registry (empty if none).
 	std::string GetSDImagePathFromRegistry() const;
 
+	// Static registry helpers, used by the config dialog when the VERA card is
+	// not yet installed (the user has selected it but not restarted). They read
+	// / write the per-slot SD image path without needing a live card instance.
+	static std::string GetSDImagePathFromRegistry(UINT slot);
+	static void SetSDImagePathInRegistry(UINT slot, const std::string& path);
+	static void ClearSDImagePathInRegistry(UINT slot);
+
 	// Self-test: read block 0 (and the FAT32 boot signature) through the SPI,
 	// logging the result to VERA.log. Returns true if the SPI read succeeds.
 	bool TestSDRead();

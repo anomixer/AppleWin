@@ -31,6 +31,7 @@
 #include "../Speaker.h"
 #include "../Uthernet2.h"
 #include "../Tfe/PCapBackend.h"
+#include "../VERACard/VERACard.h"
 
 
 // Zero (or default) initialise - values not important, as they get set correctly in Reload()
@@ -93,6 +94,8 @@ void CConfigNeedingRestart::ResetAllCardOptions(UINT slot)
 	m_hdcFirmware[slot] = HdcDefault;
 	for (UINT i = HARDDISK_1; i < NUM_HARDDISKS; i++)
 		m_slotInfoForHDC[slot].pathname[i] = "";
+
+	m_VERASDImagePath[slot] = "";
 
 	m_SaturnMemorySize[slot] = 0;
 
@@ -165,6 +168,10 @@ void CConfigNeedingRestart::Reload()
 		else if (m_Slot[slot] == CT_Saturn128K)
 		{
 			m_SaturnMemorySize[slot] = dynamic_cast<Saturn128K&>(cardManager.GetRef(slot)).GetSaturnMemorySize();
+		}
+		else if (m_Slot[slot] == CT_VERA)
+		{
+			m_VERASDImagePath[slot] = dynamic_cast<VERACard&>(cardManager.GetRef(slot)).GetSDImagePathFromRegistry();
 		}
 		else if (m_Slot[slot] == CT_MockingboardC || m_Slot[slot] == CT_Phasor)
 		{
@@ -247,6 +254,7 @@ const CConfigNeedingRestart& CConfigNeedingRestart::operator= (const CConfigNeed
 			m_slotInfoForFDC[slot].pathname[i] = other.m_slotInfoForFDC[slot].pathname[i];
 		for (UINT i = HARDDISK_1; i < NUM_HARDDISKS; i++)
 			m_slotInfoForHDC[slot].pathname[i] = other.m_slotInfoForHDC[slot].pathname[i];
+		m_VERASDImagePath[slot] = other.m_VERASDImagePath[slot];
 	}
 
 	// Advanced

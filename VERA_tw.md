@@ -169,11 +169,14 @@ CMD12、CMD13、CMD16、CMD17、CMD18、CMD24（寫入）、CMD55、CMD58（READ
 
 **掛載 / GUI：** `Configuration -> Slots` → 選 VERA 卡 → 「Configure...」開啟
 `IDD_VERA_SD_CARD`「VERA SD Card」對話框（`PageSlots.cpp`），有「Select Image...」
-與「Unmount」。`VERACard::SetSDImagePath()` 掛載影像並把路徑存到 registry
-（每 slot 區段，`REGVALUE_VERA_SD_IMAGE` = "SD Card Image"）；`UnmountSD()`
-清除。建構子用 `GetSDImagePathFromRegistry()` 還原已存的路徑。
-`VERACard::Update()` 也會執行一次 `TestSDRead()` 自我測試（讀 LBA 2048，
-把 FAT32 開機簽名寫入 `VERA.log`）。
+與「Unmount」。對話框**不要求** VERA 卡已裝好：選取的路徑會存到
+`CConfigNeedingRestart::m_VERASDImagePath[slot]`，因此可以一次選好 VERA + SD
+影像再重啟，`ApplyConfigAfterClose()` 會在卡片（重新）插入後以
+`VERACard::SetSDImagePath()` 掛載。`SetSDImagePath()` 掛載影像並把路徑存到
+registry（每 slot 區段，`REGVALUE_VERA_SD_IMAGE` = "SD Card Image"）；`UnmountSD()`
+清除。建構子用 `GetSDImagePathFromRegistry()` 還原已存的路徑。只改 SD 影像時
+立即套用（不需強制重啟）。`VERACard::Update()` 也會執行一次 `TestSDRead()`
+自我測試（讀 LBA 2048，把 FAT32 開機簽名寫入 `VERA.log`）。
 
 ---
 
@@ -223,10 +226,11 @@ Release\AppleWin.exe -s2 vera -s7 hdc -h1 "C:\dev\Time-Pilot\TimePilot-IIvera\Ti
 
 ### 掛載 SD 影像（SD 卡 SPI）
 
-裝好 VERA 卡後，開啟 `Configuration -> Slots`，對 VERA 卡按「Configure...」。
-「VERA SD Card」對話框可讓你 **Select Image...**（原始 512-byte-block 影像，
-例如 FAT32 `.img`）或 **Unmount**。選取的影像會掛載為 VERA SD 卡，路徑會存到
-registry（每 slot），下次啟動自動還原。
+開啟 `Configuration -> Slots`，選擇 VERA 卡（即使該 slot 原本是 empty）並對
+VERA 卡按「Configure...」。「VERA SD Card」對話框可讓你 **Select Image...**
+（原始 512-byte-block 影像，例如 FAT32 `.img`）或 **Unmount**。選取的影像會
+掛載為 VERA SD 卡，路徑會存到 registry（每 slot），下次啟動自動還原。
+可以在同一次設定好 VERA 卡與 SD 影像後一次重啟，兩者會同時生效。
 
 ---
 

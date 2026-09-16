@@ -71,11 +71,24 @@ The single most important thing to understand before touching `VERACard::Update`
   `nExecutedCycles` ≈ 1000. **Do not drive the VERA frame from the per-batch
   count directly** — that renders only a fraction of a frame per batch.
 
-The correct video-timing approach (current implementation) decouples VERA from
-the batches: advance **exactly one full VERA frame per Apple display frame**,
-detected via the monotonic cumulative cycle counter `g_nCumulativeCycles`
-(incremented by `CpuExecute`, see `source\CPU.cpp`). See
-`VERACard::Update` in `source\VERACard\VERACard.cpp`.
+The correct video-timing approach (current implementation) advances VERA by the
+CPU cycles executed, **cycle-count driven**, mirroring apple2ts's
+`syncVera()`/`video_step(1, cycleDelta)`. `VERACard::Update` calls
+`SyncVideo()`, which advances `m_video.Step(1, delta)` by the `g_nCumulativeCycles`
+delta since the last sync (incremented by `CpuExecute`, see `source\CPU.cpp`),
+and `IOReadCx`/`IOWriteCx` call `SyncVideo()` **before every VERA register
+access** so the scanline register (`$08`) reflects the exact current cycle.
+`g_nCumulativeCycles` is only updated at CPU batch boundaries, so the IO
+handlers first call `CpuCalcCycles(nExecutedCycles)` to make it accurate at the
+exact read/write cycle — otherwise the port's scanline probe sees the batched
+value and the deltas come out uneven (`64/32` instead of `32/32`).
+
+> Why not advance one full VERA frame per Apple frame? A once-per-frame advance
+> freezes the scanline inside a frame, and the SMB1 port's VERA-alive probe
+> reads the scanline 3× (with delays) and requires it to *change smoothly*
+> (`|(s3-s2)-(s2-s1)| < $11`). A frozen scanline fails that probe and the port
+> reports `NO VERA`. Cycle-count-driven stepping keeps the scanline live, which
+> is what makes the probe pass. See `VERACard::SyncVideo`.
 
 ## VERA card architecture
 
@@ -159,7 +172,7 @@ Key integration points:
 - **RGBA packing** is done so the little-endian memory layout is R,G,B,A
   (byte 0 = R). Do not reverse this.
 
-### NTSC centring (Apple II image "偏上 / 偏左" fix)
+### NTSC centring (Apple II image "upper left" fix)
 
 When VERA forces a 640×480 borderless area, the NTSC Apple II image (560×384)
 must be centred within it. `NTSC_VideoInit` (`source\NTSC.cpp`) positions each
@@ -223,13 +236,13 @@ IIgs, only-VERA, and VERA+VidHD combinations.
    solved by the per-frame full-scan approach.
 10. **Apple II text offset up** — NTSC image anchored at top of a 480-tall
     borderless area; solved by the centring offset above.
-11. **Apple II image off-centre (偏下 / 偏左)** — vertical was shifted down by
+11. **Apple II image off-centre (bottom, left)** — vertical was shifted down by
     VidHD's `GetFrameBufferCentringValue()` stacking on the VERA centring, and
     horizontal centring only applied when VidHD was present. Fixed in
     `NTSC_VideoInit` by subtracting `GetFrameBufferCentringOffsetY()` from the
     vertical offset and adding a horizontal centring offset only for the
     only-VERA case (`!HasVidHD()`).
-12. **Sandy/scratchy audio (沙沙聲) — root cause.** The VERA ring buffer is
+12. **Sandy/scratchy audio — root cause.** The VERA ring buffer is
     only ~3 frames (8820 bytes ≈ 50 ms), but the SSI263/Mockingboard fill-level
     feedback loop (steering `m_numSamplesError` via `SoundCore_GetErrorInc()`,
     ±20 per batch) is tuned for a **65536-byte** buffer. On the tiny VERA buffer
@@ -250,7 +263,7 @@ IIgs, only-VERA, and VERA+VidHD combinations.
     producing a very fast high-frequency hiss. Move the LFSR advance above the
     channel loop so it ticks once per output sample (the noise generator is
     clocked at the PSG/sample rate).
-14. **Random "flash crash" (閃退) after minutes — VERA-installation dependent.**
+14. **Random "flash crash" after minutes — VERA-installation dependent.**
     The diagnostic that isolates it: the crash happens whenever the VERA card is
     installed *and any app is running*, including a **non-VERA** app (e.g.
     Mockingboard music). When VERA is removed, no crash (10+ min). This means
@@ -260,7 +273,7 @@ IIgs, only-VERA, and VERA+VidHD combinations.
     is NOT the culprit for the non-VERA-app crash).
     **Critical:** an access violation (0xC0000005) is an **SEH** exception and is
     **NOT caught** by `WinMain`'s C++ `try/catch (std::exception)` — the process
-    simply terminates ("閃退"). To locate it, add a
+    simply terminates. To locate it, add a
     `SetUnhandledExceptionFilter` handler that logs the exception code+address
     (`source\Windows\AppleWin.cpp`); `LogFileOutput`'s log file is unbuffered
     (`_IONBF`), so the line is flushed before termination. Note `LogInit()` only

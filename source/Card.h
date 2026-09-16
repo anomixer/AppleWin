@@ -54,6 +54,7 @@ public:
 	virtual bool LoadSnapshot(YamlLoadHelper& yamlLoadHelper, UINT version) = 0;
 
 	SS_CARDTYPE QueryType() { return m_type; }
+	UINT GetSlot() { return m_slot; }
 
 	static const std::string& GetCardNameEmpty();
 	std::string GetCardName();

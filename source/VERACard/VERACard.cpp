@@ -37,7 +37,7 @@ VERACard::VERACard(UINT slot)
 	: Card(CT_VERA, slot)
 	, m_lastVideoUpdateCycle(0)
 	, m_bSDTested(false)
-	, m_lastFrameCycles(0)
+	, m_lastVideoCycles(0)
 	, m_lastSoundTick(0)
 	, m_byteOffset((uint32_t)-1)
 	, m_lastPlayCursor((uint32_t)-1)
@@ -146,7 +146,7 @@ void VERACard::Reset(const bool powerCycle)
 	m_audio.SetSampleRate(kSampleRate);
 
 	m_lastVideoUpdateCycle = 0;
-	m_lastFrameCycles = 0;
+	m_lastVideoCycles = 0;
 	m_lastSoundTick = 0;
 	m_byteOffset = (uint32_t)-1;
 	m_lastPlayCursor = (uint32_t)-1;
@@ -176,21 +176,6 @@ void VERACard::Update(const ULONG nExecutedCycles)
 		m_bFrameCleared = true;
 	}
 
-	// --- Video step ---
-	//
-	// VERA's video timing must be decoupled from the CPU cycle batches that
-	// drive this Update(). Update() is called ~16 times per Apple frame (once
-	// per ~1000-cycle batch), so advancing VERA by the batch count here would
-	// render only a fraction of a frame per batch and let the scan position
-	// drift, causing scrolling. Instead we advance exactly one complete VERA
-	// frame (525 lines = 16800 pixel-clock steps) per Apple display frame,
-	// detected via the monotonic cumulative cycle counter. This keeps the
-	// emulated VERA frame rate matching the Apple II frame rate (~1 frame per
-	// frame) with no scrolling, no tearing and no 16x speedup.
-	const uint64_t curCycles = g_nCumulativeCycles;
-	if (m_lastFrameCycles == 0)
-		m_lastFrameCycles = curCycles;	// first call: establish a baseline
-
 	// Heartbeat: log every ~600 Update() calls (~10 s) so a VERA crash can be
 	// located (which subsystem it stopped in). Written to VERA.log next to the
 	// exe, independent of the -log AppleWin.log.
@@ -198,21 +183,13 @@ void VERACard::Update(const ULONG nExecutedCycles)
 	if ((s_heartbeat++ % 600) == 0)
 		LogWriteVERALog("VERA alive: update %u\n", s_heartbeat);
 
-	const uint64_t frameCycles = NTSC_GetCyclesPerFrame();
-	while (curCycles >= m_lastFrameCycles + frameCycles)
-	{
-		m_lastFrameCycles += frameCycles;
-
-		// One full VERA frame: 525 lines x 800 pixels / 25 pixels-per-step.
-		const int kFullFrameCycles = 525 * 800 / 25;	// 16800
-		m_video.Step(1, kFullFrameCycles, false);
-		m_video.Update();
-
-		// Only paint the VERA framebuffer when the VERA video output is
-		// actually enabled; otherwise leave the Apple II (NTSC) screen.
-		if (m_video.IsVideoOutputEnabled())
-			UpdateDisplay();
-	}
+	// --- Video step ---
+	//
+	// Advance the VERA scan position to the current cumulative cycle (mirrors
+	// apple2ts's cycle-count callback). Keeps the scanline register "live"
+	// within a frame, which the SMB1 port relies on (it reads the scanline 3x
+	// and requires it to change smoothly between reads).
+	SyncVideo();
 
 	// --- IRQ ---
 	const bool irq = m_video.GetIRQOut();
@@ -223,6 +200,28 @@ void VERACard::Update(const ULONG nExecutedCycles)
 
 	// --- Audio ---
 	UpdateSound();
+}
+
+void VERACard::SyncVideo()
+{
+	const uint64_t now = g_nCumulativeCycles;
+	if (m_lastVideoCycles == 0)
+		m_lastVideoCycles = now;	// first call: establish baseline
+	const uint64_t delta = now - m_lastVideoCycles;
+	m_lastVideoCycles = now;
+	if (delta == 0)
+		return;
+
+	const bool newFrame = m_video.Step(1, static_cast<int>(delta), false);
+	if (newFrame)
+	{
+		m_video.Update();
+
+		// Only paint the VERA framebuffer when the VERA video output is
+		// actually enabled; otherwise leave the Apple II (NTSC) screen.
+		if (m_video.IsVideoOutputEnabled())
+			UpdateDisplay();
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -236,6 +235,8 @@ BYTE __stdcall VERACard::IOReadCx(WORD pc, WORD addr, BYTE bWrite, BYTE value, U
 	(void)pc; (void)bWrite; (void)value; (void)nExecutedCycles;
 	if (!pCard)
 		return 0;
+	CpuCalcCycles(nExecutedCycles);	// make g_nCumulativeCycles accurate at this read (IO reads are batched)
+	pCard->SyncVideo();	// keep the scanline register live at this exact cycle
 	return pCard->m_video.Read(static_cast<uint8_t>(addr & 0xff), false);
 }
 
@@ -243,9 +244,11 @@ BYTE __stdcall VERACard::IOWriteCx(WORD pc, WORD addr, BYTE bWrite, BYTE value, 
 {
 	const UINT slot = (addr >> 8) & 0xf;
 	VERACard* pCard = (VERACard*)MemGetSlotParameters(slot);
-	(void)pc; (void)bWrite; (void)nExecutedCycles;
+	(void)pc; (void)bWrite;
 	if (!pCard)
 		return 0;
+	CpuCalcCycles(nExecutedCycles);	// make g_nCumulativeCycles accurate at this write (IO reads are batched)
+	pCard->SyncVideo();	// keep the scanline register live at this exact cycle
 	pCard->m_video.Write(static_cast<uint8_t>(addr & 0xff), value);
 	return 0;
 }

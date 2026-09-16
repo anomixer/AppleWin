@@ -39,6 +39,11 @@ public:
 	static BYTE __stdcall IOReadCx(WORD pc, WORD addr, BYTE bWrite, BYTE value, ULONG nExecutedCycles);
 	static BYTE __stdcall IOWriteCx(WORD pc, WORD addr, BYTE bWrite, BYTE value, ULONG nExecutedCycles);
 
+	// Advance the VERA video to the current cumulative cycle (mirrors
+	// apple2ts's syncVera, called before every VERA register access). Keeps the
+	// scanline register live at the exact instant a guest program reads it.
+	void SyncVideo();
+
 	// True when VERA video output is enabled (used by Video to decide display override)
 	bool IsActive() const { return m_video.IsVideoOutputEnabled(); }
 
@@ -79,7 +84,7 @@ private:
 
 	ULONG m_lastVideoUpdateCycle;
 	bool m_bSDTested;	// SD self-test done once after mount
-	uint64_t m_lastFrameCycles;	// cumulative cycle count when the last full VERA frame was advanced
+	uint64_t m_lastVideoCycles;	// cumulative cycle count when the VERA video was last advanced
 	ULONGLONG m_lastSoundTick;	// real-time ms when UpdateSound last ran (stall detection)
 	uint32_t m_byteOffset;
 	uint32_t m_lastPlayCursor;	// last DS play-cursor position (drives sample gen)

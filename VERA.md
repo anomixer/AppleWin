@@ -86,26 +86,39 @@ output.**
 ### Display timing (AppleWin integration)
 
 `VERACard::Update()` is called about **16 times / frame** (each a ~1000-cycle
-batch). To avoid both the scan-position drift from advancing too little per
-batch (scrolling) and the 16x speedup from forcing a full scan per batch, the
-current approach advances **exactly one full frame per Apple display frame**,
-detecting the Apple frame boundary via the cumulative cycle counter
-`g_nCumulativeCycles`:
+batch). The current approach advances VERA **cycle-count driven** (mirrors
+apple2ts's `syncVera()`): `VERACard::SyncVideo()` advances
+`m_video.Step(1, delta)` by the `g_nCumulativeCycles` delta since the last sync,
+and `IOReadCx`/`IOWriteCx` call `SyncVideo()` **before every VERA register
+access** so the scanline register (`$08`) is live at the exact current cycle.
+`g_nCumulativeCycles` is only updated at CPU batch boundaries, so the IO
+handlers first call `CpuCalcCycles(nExecutedCycles)` to make it accurate at the
+exact read/write cycle — otherwise the port's scanline probe sees the batched
+value and the deltas come out uneven (`64/32` instead of `32/32`):
 
 ```cpp
-const uint64_t curCycles = g_nCumulativeCycles;
-if (m_lastFrameCycles == 0)
-    m_lastFrameCycles = curCycles;
-const uint64_t frameCycles = NTSC_GetCyclesPerFrame();
-while (curCycles >= m_lastFrameCycles + frameCycles)
+void VERACard::SyncVideo()
 {
-    m_lastFrameCycles += frameCycles;
-    m_video.Step(1, 16800, false);   // one full frame
-    m_video.Update();
-    if (m_video.IsVideoOutputEnabled())
-        UpdateDisplay();
+    const uint64_t now = g_nCumulativeCycles;
+    if (m_lastVideoCycles == 0) m_lastVideoCycles = now;
+    const uint64_t delta = now - m_lastVideoCycles;
+    m_lastVideoCycles = now;
+    if (delta == 0) return;
+    const bool newFrame = m_video.Step(1, (int)delta, false);
+    if (newFrame)
+    {
+        m_video.Update();
+        if (m_video.IsVideoOutputEnabled())
+            UpdateDisplay();
+    }
 }
 ```
+
+> A once-per-full-frame advance was tried and reverted: it freezes the scanline
+> inside a frame, and the SMB1 port's VERA-alive probe reads the scanline 3×
+> and requires it to change smoothly — a frozen scanline fails that probe and
+> the port reports `NO VERA`. Cycle-count-driven stepping keeps the scanline
+> live and is what makes the probe pass.
 
 ---
 

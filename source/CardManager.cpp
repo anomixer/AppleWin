@@ -117,8 +117,14 @@ void CardManager::InsertInternal(UINT slot, SS_CARDTYPE type)
 		m_slot[slot] = m_pVidHDCard = new VidHDCard(slot);
 		break;
 	case CT_VERA:
-		_ASSERT(m_pVERACard == NULL);
-		if (m_pVERACard) break;	// Only support one VERA card
+		if (m_pVERACard)
+		{
+			// Only support one VERA card: move it from its current slot to the requested slot
+			// (e.g. registry restored VERA into slot 2 and the cmd line asked for slot 4)
+			const UINT oldSlot = m_pVERACard->GetSlot();
+			RemoveInternal(oldSlot);
+			RegSetConfigSlotNewCardType(oldSlot, CT_Empty);
+		}
 		m_slot[slot] = m_pVERACard = new VERACard(slot);
 		break;
 	case CT_Uthernet2:

@@ -147,6 +147,7 @@ void VERACard::Reset(const bool powerCycle)
 
 	m_lastVideoUpdateCycle = 0;
 	m_lastVideoCycles = 0;
+	m_lastSDCycles = 0;
 	m_lastSoundTick = 0;
 	m_byteOffset = (uint32_t)-1;
 	m_lastPlayCursor = (uint32_t)-1;
@@ -166,7 +167,10 @@ void VERACard::Update(const ULONG nExecutedCycles)
 
 	// Advance the SD card SPI timing by the CPU cycles executed in this batch
 	// (mirrors apple2ts's vera_spi_step(cycleDelta) in the cycle-count callback).
-	m_video.StepSPI((int)nExecutedCycles);
+	// SyncSPI() shares the cycle-delta baseline with the IO handlers, so the
+	// SPI advances continuously whether the guest is polling registers or the
+	// emulator is between batches.
+	SyncSPI();
 
 	// Clear the framebuffer once when VERA first becomes active, so leftover
 	// Apple II / border pixels don't show through.
@@ -224,6 +228,18 @@ void VERACard::SyncVideo()
 	}
 }
 
+void VERACard::SyncSPI()
+{
+	const uint64_t now = g_nCumulativeCycles;
+	if (m_lastSDCycles == 0)
+		m_lastSDCycles = now;	// first call: establish baseline
+	const uint64_t delta = now - m_lastSDCycles;
+	m_lastSDCycles = now;
+	if (delta == 0)
+		return;
+	m_video.StepSPI((int)delta);
+}
+
 // ---------------------------------------------------------------------------
 // IO handlers
 // ---------------------------------------------------------------------------
@@ -237,6 +253,7 @@ BYTE __stdcall VERACard::IOReadCx(WORD pc, WORD addr, BYTE bWrite, BYTE value, U
 		return 0;
 	CpuCalcCycles(nExecutedCycles);	// make g_nCumulativeCycles accurate at this read (IO reads are batched)
 	pCard->SyncVideo();	// keep the scanline register live at this exact cycle
+	pCard->SyncSPI();	// advance the SD SPI so a guest's BUSY poll sees the byte ready
 	return pCard->m_video.Read(static_cast<uint8_t>(addr & 0xff), false);
 }
 
@@ -249,6 +266,7 @@ BYTE __stdcall VERACard::IOWriteCx(WORD pc, WORD addr, BYTE bWrite, BYTE value, 
 		return 0;
 	CpuCalcCycles(nExecutedCycles);	// make g_nCumulativeCycles accurate at this write (IO reads are batched)
 	pCard->SyncVideo();	// keep the scanline register live at this exact cycle
+	pCard->SyncSPI();	// advance the SD SPI so a byte sent by the guest starts clocking
 	pCard->m_video.Write(static_cast<uint8_t>(addr & 0xff), value);
 	return 0;
 }

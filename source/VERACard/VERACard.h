@@ -44,6 +44,14 @@ public:
 	// scanline register live at the exact instant a guest program reads it.
 	void SyncVideo();
 
+	// Advance the VERA SD SPI to the current cumulative cycle. The SPI only
+	// advances at batch boundaries in Update(); calling this before every SD
+	// register access makes a byte complete within a couple of CPU cycles of
+	// the guest writing it, instead of waiting a full ~1000-cycle batch. A
+	// guest's bounded BUSY-poll loop (256 spins) therefore never expires and
+	// never reads a stale byte, and a bulk SD read runs at full speed.
+	void SyncSPI();
+
 	// True when VERA video output is enabled (used by Video to decide display override)
 	bool IsActive() const { return m_video.IsVideoOutputEnabled(); }
 
@@ -85,6 +93,7 @@ private:
 	ULONG m_lastVideoUpdateCycle;
 	bool m_bSDTested;	// SD self-test done once after mount
 	uint64_t m_lastVideoCycles;	// cumulative cycle count when the VERA video was last advanced
+	uint64_t m_lastSDCycles;	// cumulative cycle count when the VERA SD SPI was last advanced
 	ULONGLONG m_lastSoundTick;	// real-time ms when UpdateSound last ran (stall detection)
 	uint32_t m_byteOffset;
 	uint32_t m_lastPlayCursor;	// last DS play-cursor position (drives sample gen)

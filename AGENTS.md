@@ -129,10 +129,18 @@ Key integration points:
     bit 2 = SD_AUTOTX, bit 7 = SD_BUSY (a byte transfer is in progress).
 - **SPI timing**: `SPI_CLOCK_RATE_MHZ = 12`; `SpiStep(clocks)` adds
   `clocks * 12` to a busy counter, and a byte completes once it reaches `>= 10`
-  (~1 CPU cycle per byte in emulation). `VERACard::Update()` calls
-  `m_video.StepSPI(nExecutedCycles)` each 1 ms batch — the SPI only advances at
-  batch boundaries, so a guest program must **poll SD_STATUS bit 7**, not use a
-  fixed delay, to wait for a transfer.
+  (~1 CPU cycle per byte in emulation). `VERACard::SyncSPI()` advances the SPI
+  by the `g_nCumulativeCycles` delta since the last advance, and is called from
+  **every** VERA register access (`IOReadCx`/`IOWriteCx`) as well as from
+  `Update()`, so a byte completes within ~1–2 CPU cycles of the guest writing
+  it. A guest program must still **poll SD_STATUS bit 7**, not use a fixed
+  delay, to wait for a transfer.
+  > The SPI was originally advanced only at `Update()` batch boundaries
+  > (~1000 cycles each), which made every byte take a whole batch: a bulk read
+  > was ~1000× too slow, and a guest's bounded 256-spin BUSY poll could expire
+  > before the byte completed and read a stale byte — intermittent corruption
+  > (a horizontal break at a random row) in SD-SLIDES / SD-HIRES. Advancing per
+  > register access fixes both.
 - **Commands** (SPI mode): CMD0, CMD8, CMD9 (SEND_CSD), ACMD41 (CMD55+CMD41),
   CMD12, CMD13, CMD16, CMD17, CMD18, CMD24 (write), CMD55, CMD58 (READ_OCR).
 - **Mount / GUI**: `Configuration -> Slots` → select VERA → "Configure..."

@@ -98,7 +98,7 @@ private:
 	void ConfigResetMockingboard(UINT slot);
 	void ConfigResetRamWorks();
 
-	UINT RemovalConfirmation(UINT command);
+	UINT RemovalConfirmation(HWND hWnd, UINT command);
 
 	static CPageSlots* ms_this;
 	static UINT ms_slot;

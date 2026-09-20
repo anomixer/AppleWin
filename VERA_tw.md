@@ -160,12 +160,15 @@ VERA 暫存器由 `addr & 0x1F` 選定（`VERAVideo::Write/Read`）。
 
 **SPI 時序：** `SPI_CLOCK_RATE_MHZ = 12`。`SpiStep(clocks)` 把 `clocks * 12`
 加進 busy 計數器，累積到 `>= 10` 即完成一個 byte（模擬中約 1 CPU 週期完成一個
-byte）。`VERACard::Update()` 每個 1 ms 批次呼叫 `m_video.StepSPI(...)` —
-SPI 只在批次邊界推進，所以 guest 程式要等傳輸完成，必須 **poll SD_STATUS bit 7**，
-不能用固定延遲。
+byte）。`VERACard::SyncSPI()` 在每次存取 VERA 暫存器（`IOReadCx`/`IOWriteCx`）與 `Update()`
+時依據週期增量即時推進 SPI，因此傳輸在 1～2 CPU 週期內即可完成。Guest 程式仍應
+**poll SD_STATUS bit 7** 等候傳輸完成。
 
 **支援指令**（SPI 模式）：CMD0、CMD8、CMD9（SEND_CSD）、ACMD41（CMD55+CMD41）、
 CMD12、CMD13、CMD16、CMD17、CMD18、CMD24（寫入）、CMD55、CMD58（READ_OCR）。
+- **CMD58（READ_OCR）**：依 SD SPI 規範回傳 5 位元組 `[R1, 0xC0, 0xFF, 0x80, 0x00]`，首位元組為卡片狀態（閒置為 `0x01`，已初始化為 `0x00`）。
+- **CMD24（WRITE_BLOCK）**：接收起始 token（`0xFE`）、512 位元組資料與 CRC16 後，回覆標準 Data Response Token：寫入成功回覆 `0x05`（接受），超出邊界或唯讀錯誤回覆 `0x0D`（拒絕）。
+- **狀態重設**：實作 `ResetSpiState()`，在卸載 SD 卡或更換映像檔時自動清空 SPI 緩衝區與傳輸狀態。
 
 **掛載 / GUI：** `Configuration -> Slots` → 選 VERA 卡 → 「Configure...」開啟
 `IDD_VERA_SD_CARD`「VERA SD Card」對話框（`PageSlots.cpp`），有「Select Image...」
@@ -176,7 +179,8 @@ CMD12、CMD13、CMD16、CMD17、CMD18、CMD24（寫入）、CMD55、CMD58（READ
 registry（每 slot 區段，`REGVALUE_VERA_SD_IMAGE` = "SD Card Image"）；`UnmountSD()`
 清除。建構子用 `GetSDImagePathFromRegistry()` 還原已存的路徑。只改 SD 影像時
 立即套用（不需強制重啟）。`VERACard::Update()` 也會執行一次 `TestSDRead()`
-自我測試（讀 LBA 2048，把 FAT32 開機簽名寫入 `VERA.log`）。
+自我測試（讀 LBA 2048，把 FAT32 開機簽名寫入 `VERA.log`）；完整協定驗證由
+`test\VERATest\VERATest.cpp`（Test 7）涵蓋。
 
 ---
 

@@ -26,7 +26,7 @@ VERASD::~VERASD()
 	CloseFile();
 }
 
-void VERASD::Reset()
+void VERASD::ResetSpiState()
 {
 	m_selected = false;
 	m_busy = false;
@@ -35,9 +35,6 @@ void VERASD::Reset()
 	m_sending_byte = 0xff;
 	m_outcounter = 0;
 
-	m_sdcard_file = nullptr;
-	m_sdcard_path.clear();
-	m_sdcard_attached = false;
 	m_is_acmd = false;
 	m_is_idle = true;
 	m_is_initialized = false;
@@ -48,6 +45,15 @@ void VERASD::Reset()
 	m_last_cmd = 0;
 	m_response_length = 0;
 	m_response_counter = 0;
+}
+
+void VERASD::Reset()
+{
+	ResetSpiState();
+
+	m_sdcard_file = nullptr;
+	m_sdcard_path.clear();
+	m_sdcard_attached = false;
 }
 
 bool VERASD::Init()
@@ -68,6 +74,7 @@ void VERASD::SetPath(const std::string& path)
 
 void VERASD::Unmount()
 {
+	ResetSpiState();
 	CloseFile();
 	m_sdcard_path.clear();
 }
@@ -82,12 +89,17 @@ bool VERASD::OpenFile()
 	m_sdcard_file = fopen(m_sdcard_path.c_str(), "r+b");
 	if (!m_sdcard_file)
 	{
-		LogOutput("VERA SD: cannot open SD image '%s'\n", m_sdcard_path.c_str());
-		return false;
+		// Fallback: try opening read-only if read-write fails
+		m_sdcard_file = fopen(m_sdcard_path.c_str(), "rb");
+		if (!m_sdcard_file)
+		{
+			LogOutput("VERA SD: cannot open SD image '%s'\n", m_sdcard_path.c_str());
+			return false;
+		}
 	}
 
 	m_sdcard_attached = true;
-	m_is_initialized = false;
+	ResetSpiState();
 	LogOutput("VERA SD: SD card attached (%s)\n", m_sdcard_path.c_str());
 	return true;
 }
@@ -310,11 +322,12 @@ void VERASD::SetResponseR2()
 
 void VERASD::SetResponseR3()
 {
-	m_response[0] = 0xC0;
-	m_response[1] = 0xFF;
-	m_response[2] = 0x80;
-	m_response[3] = 0x00;
-	m_response_length = 4;
+	m_response[0] = m_is_idle ? 0x01 : 0x00;
+	m_response[1] = 0xC0;
+	m_response[2] = 0xFF;
+	m_response[3] = 0x80;
+	m_response[4] = 0x00;
+	m_response_length = 5;
 }
 
 void VERASD::SetResponseR7()
@@ -512,8 +525,13 @@ uint8_t VERASD::HandleByte(uint8_t inbyte)
 			// Check for 'start block' byte
 			if (m_last_cmd == CMD24 && m_rxbuf[0] == 0xFE)
 			{
+				bool written = false;
 				if ((uint64_t)m_lba * 512 < FileSizeBytes())
-					WriteBlock(m_lba, m_rxbuf + 1);
+					written = WriteBlock(m_lba, m_rxbuf + 1);
+				// 0x05 = Data accepted, 0x0D = Data rejected due to write error / write protection
+				m_response[0] = written ? 0x05 : 0x0D;
+				m_response_length = 1;
+				m_response_counter = 0;
 			}
 		}
 	}

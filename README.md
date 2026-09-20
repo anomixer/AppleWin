@@ -31,7 +31,7 @@ Peripheral cards and add-on hardware supported:
 - 4Play and SNES MAX joystick cards
 - VidHD card (functionality limited to IIgs' Super Hi-Res video modes)
 - Commander X16 VERA card (slot 2 or 4): 640×480 VGA/NTSC graphics, 2 layers,
-  128 sprites, 256-colour palette, 16-channel PSG + PCM audio, IRQ
+  128 sprites, 256-colour palette, 16-channel PSG + PCM audio, SD card (SPI), IRQ
 - No Slot Clock (NSC)
 - Game I/O Connector copy protection dongles 
 
@@ -41,7 +41,7 @@ Commander X16 VERA card
 The VERA expansion card (port of `apple2ts`'s TypeScript VERA) is installed in
 **slot 2 or 4** (`-s2 vera` / `-s4 vera`). It provides a 640×480 VGA/NTSC
 graphics core (2 layers, 128 sprites, 256-colour palette), a 16-channel PSG +
-PCM audio core, and an IRQ line.
+PCM audio core, an SD card (SPI) storage interface, and an IRQ line.
 
 Behaviour:
 
@@ -54,6 +54,10 @@ Behaviour:
   DS play cursor so the write rate exactly tracks real-time playback — no
   drift, no periodic glitch. The DS ring buffer is ~3 frames (~50 ms) with a
   1/2-buffer lead.
+- **SD Card (SPI)** — emulates the SD/MMC SPI interface on `$Cs1E` (SD_DATA) and
+  `$Cs1F` (SD_STATUS), supporting raw 512-byte block images (e.g. FAT32). Images
+  can be mounted/unmounted via the `Configuration -> Slots -> VERA -> Configure...`
+  dialog and persist in the per-slot registry configuration.
 - **Diagnostics** — on a stall (emulator hang) the DS buffer is flushed so no
   lingering audio survives. Heartbeat + unhandled-exception info is written to
   `VERA.log` next to the exe (independent of the `-log` `AppleWin.log`).

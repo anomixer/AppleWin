@@ -75,6 +75,7 @@ private:
 	void SetResponseR7();
 	void SetResponseCSD();
 	uint32_t LoadBlock(uint8_t* dest);
+	void ResetSpiState();
 
 	// State
 	FILE* m_sdcard_file;
@@ -97,7 +98,7 @@ private:
 	uint32_t m_lba;
 	int m_last_cmd;
 
-	uint8_t m_response[3 + 1 + 512 + 2];	// max response size (R3=4, CSD=21, block=515)
+	uint8_t m_response[3 + 1 + 512 + 2];	// max response size (R3=5, CSD=21, block=515)
 	int m_response_length;
 	int m_response_counter;
 };

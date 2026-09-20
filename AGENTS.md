@@ -143,6 +143,16 @@ Key integration points:
   > register access fixes both.
 - **Commands** (SPI mode): CMD0, CMD8, CMD9 (SEND_CSD), ACMD41 (CMD55+CMD41),
   CMD12, CMD13, CMD16, CMD17, CMD18, CMD24 (write), CMD55, CMD58 (READ_OCR).
+  - **CMD58 (READ_OCR)**: Returns 5 bytes according to SD SPI specification:
+    `[R1, 0xC0, 0xFF, 0x80, 0x00]` where the initial byte is R1 (`0x01` if idle,
+    `0x00` if card initialized).
+  - **CMD24 (WRITE_BLOCK)**: After receiving data packet (`0xFE` + 512 bytes +
+    2-byte CRC), responds with standard Data Response Token: `0x05` for accepted
+    write, or `0x0D` for rejected write (e.g. out-of-range LBA or read-only image).
+  - **State reset**: `ResetSpiState()` resets all transmission buffers, counters,
+    and flags (`m_selected`, `m_busy`, `m_rxbuf_idx`, `m_response_length`,
+    `m_ongoing_multiblock_read`, etc.) upon `Reset()`, `Unmount()`, or attaching
+    a new image in `OpenFile()`.
 - **Mount / GUI**: `Configuration -> Slots` → select VERA → "Configure..."
   opens the `IDD_VERA_SD_CARD` "VERA SD Card" dialog (`PageSlots.cpp`) with
   "Select Image..." / "Unmount". The dialog does **not** require the VERA card
@@ -160,9 +170,11 @@ Key integration points:
   > `RegSetConfigSlotNewCardType` deletes the whole slot registry section, so
   > storing the SD path only in the slot section (the old approach) made it
   > disappear on restart — hence the config-based storage above.
-- **Self-test**: `VERACard::Update()` runs `TestSDRead()` once after an image
-  is mounted — reads LBA 2048 through the SPI and logs the FAT32 boot
-  signature to `VERA.log`.
+- **Self-test & Unit test**: `VERACard::Update()` runs `TestSDRead()` once after
+  an image is mounted (reads LBA 2048 through the SPI and logs the FAT32 boot
+  signature to `VERA.log`). In addition, `test\VERATest\VERATest.cpp` contains
+  Test 7 covering the full SD SPI state machine: CMD0, CMD8, CMD58 (idle/active),
+  ACMD41, CMD24 write tokens (`0x05`/`0x0D`), and block verification.
 
 ### Display / framebuffer model
 

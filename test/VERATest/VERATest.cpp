@@ -8,6 +8,10 @@
 #include <cstdlib>
 
 #include "../../source/VERACard/VERAVideo.h"
+#include "../../source/VERACard/VERASD.h"
+
+void LogOutput(const char* fmt, ...) {}
+void LogWriteVERALog(const char* fmt, ...) {}
 
 static int g_failures = 0;
 static int g_passes = 0;
@@ -148,6 +152,92 @@ int main()
 		fprintf(stderr, "  INFO: out_mode=0 stepped, frames=%d\n", frames);
 		fflush(stderr);
 		CHECK(frames > 0, "Test6: out_mode=0 produces frames");
+	}
+
+	// --- Test 7: VERA SD SPI protocol (CMD0, CMD8, CMD58 R3, ACMD41, CMD24 write tokens) ---
+	{
+		VERASD sd;
+		const char* tmp_path = "test_vera_sd_tmp.img";
+		FILE* f = fopen(tmp_path, "w+b");
+		if (f)
+		{
+			uint8_t zero512[512] = { 0 };
+			fwrite(zero512, 1, 512, f);
+			fwrite(zero512, 1, 512, f); // 2 sectors = 1024 bytes
+			fclose(f);
+		}
+
+		sd.SetPath(tmp_path);
+		CHECK(sd.IsMounted(), "Test7: SD card mounted");
+
+		auto spi_write = [&sd](uint8_t b) { sd.SpiWrite(0, b); sd.SpiStep(10); };
+		auto spi_read = [&sd]() -> uint8_t { sd.SpiWrite(0, 0xFF); sd.SpiStep(10); return sd.SpiRead(0); };
+
+		sd.SpiWrite(1, 0x01); // Select card (SS=1)
+
+		// CMD0: GO_IDLE_STATE -> Expect R1 = 0x01
+		spi_write(0x40); // CMD0
+		spi_write(0); spi_write(0); spi_write(0); spi_write(0); spi_write(0x95);
+		uint8_t r1 = spi_read();
+		CHECK(r1 == 0x01, "Test7: CMD0 returns R1 = 0x01 (idle)");
+
+		// CMD58: READ_OCR in idle state -> Expect 5 bytes: [0x01, 0xC0, 0xFF, 0x80, 0x00]
+		spi_write(0x7A); // CMD58 (0x40 | 58)
+		spi_write(0); spi_write(0); spi_write(0); spi_write(0); spi_write(0xFF);
+		uint8_t r3_idle[5];
+		for (int i = 0; i < 5; i++) r3_idle[i] = spi_read();
+		CHECK(r3_idle[0] == 0x01 && r3_idle[1] == 0xC0 && r3_idle[2] == 0xFF && r3_idle[3] == 0x80 && r3_idle[4] == 0x00,
+			"Test7: CMD58 returns 5 bytes with idle R1 [01 C0 FF 80 00]");
+
+		// ACMD41: CMD55 then CMD41 -> initialize card
+		spi_write(0x77); // CMD55
+		spi_write(0); spi_write(0); spi_write(0); spi_write(0); spi_write(0xFF);
+		spi_read(); // R1
+		spi_write(0x69); // ACMD41
+		spi_write(0); spi_write(0); spi_write(0); spi_write(0); spi_write(0xFF);
+		uint8_t acmd_r1 = spi_read();
+		CHECK(acmd_r1 == 0x00, "Test7: ACMD41 leaves card in non-idle state (R1 = 0x00)");
+
+		// CMD58: READ_OCR in active state -> Expect 5 bytes: [0x00, 0xC0, 0xFF, 0x80, 0x00]
+		spi_write(0x7A); // CMD58
+		spi_write(0); spi_write(0); spi_write(0); spi_write(0); spi_write(0xFF);
+		uint8_t r3_active[5];
+		for (int i = 0; i < 5; i++) r3_active[i] = spi_read();
+		CHECK(r3_active[0] == 0x00 && r3_active[1] == 0xC0 && r3_active[2] == 0xFF && r3_active[3] == 0x80 && r3_active[4] == 0x00,
+			"Test7: CMD58 returns 5 bytes with active R1 [00 C0 FF 80 00]");
+
+		// CMD24: WRITE_BLOCK sector 0
+		spi_write(0x58); // CMD24 (0x40 | 24)
+		spi_write(0); spi_write(0); spi_write(0); spi_write(0); spi_write(0xFF);
+		uint8_t cmd24_r1 = spi_read();
+		CHECK(cmd24_r1 == 0x00, "Test7: CMD24 command phase returns R1 = 0x00");
+
+		// Send data packet: start token (0xFE) + 512 bytes payload + 2 CRC bytes
+		spi_write(0xFE);
+		for (int i = 0; i < 512; i++) spi_write((uint8_t)(i & 0xFF));
+		spi_write(0xFF); spi_write(0xFF); // CRC16
+
+		// Read data response token: 0x05 = accepted
+		uint8_t wr_token = spi_read();
+		CHECK(wr_token == 0x05, "Test7: CMD24 write accepted returns 0x05");
+
+		// Test read back with TestReadBlock
+		uint8_t readback[512] = { 0 };
+		bool read_ok = sd.TestReadBlock(0, readback);
+		CHECK(read_ok && readback[1] == 0x01 && readback[255] == 0xFF, "Test7: TestReadBlock verifies written data");
+
+		// CMD24: WRITE_BLOCK to out-of-range sector (LBA 999999) -> expect 0x0D rejection token
+		spi_write(0x58);
+		spi_write(0x00); spi_write(0x0F); spi_write(0x42); spi_write(0x3F); spi_write(0xFF); // LBA 999999
+		spi_read();
+		spi_write(0xFE);
+		for (int i = 0; i < 512; i++) spi_write(0xAA);
+		spi_write(0xFF); spi_write(0xFF);
+		uint8_t wr_fail_token = spi_read();
+		CHECK(wr_fail_token == 0x0D, "Test7: CMD24 write out-of-range returns 0x0D rejection token");
+
+		sd.Unmount();
+		remove(tmp_path);
 	}
 
 	fprintf(stderr, "\nResult: %d passed, %d failed\n", g_passes, g_failures);

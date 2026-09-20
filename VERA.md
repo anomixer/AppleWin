@@ -183,12 +183,19 @@ VERA registers are selected by `addr & 0x1F` (`VERAVideo::Write/Read`).
 
 **SPI timing:** `SPI_CLOCK_RATE_MHZ = 12`. `SpiStep(clocks)` adds `clocks * 12`
 to a busy counter, and a byte completes once it reaches `>= 10` (~1 CPU cycle
-per byte in emulation). `VERACard::Update()` calls `m_video.StepSPI(...)` each
-1 ms batch — the SPI only advances at batch boundaries, so a guest program must
-**poll SD_STATUS bit 7**, not use a fixed delay, to wait for a transfer.
+per byte in emulation). `VERACard::SyncSPI()` advances the SPI by the cumulative
+cycle delta before every VERA register access (`IOReadCx`/`IOWriteCx`) as well
+as in `Update()`, so transfers complete within 1–2 CPU cycles. Guest programs must
+still **poll SD_STATUS bit 7** to wait for transfer completion.
 
 **Commands** (SPI mode): CMD0, CMD8, CMD9 (SEND_CSD), ACMD41 (CMD55+CMD41),
 CMD12, CMD13, CMD16, CMD17, CMD18, CMD24 (write), CMD55, CMD58 (READ_OCR).
+- **CMD58 (READ_OCR)**: Returns 5 bytes according to SD SPI specification:
+  `[R1, 0xC0, 0xFF, 0x80, 0x00]` with R1 indicating card status (`0x01` idle, `0x00` active).
+- **CMD24 (WRITE_BLOCK)**: Receives start token (`0xFE`), 512-byte payload, and
+  CRC16, responding with Data Response Token `0x05` (accepted) or `0x0D` (write error / write protection).
+- **State reset**: `ResetSpiState()` clears SPI shift buffers, command phase,
+  and transfer state upon card unmount or image replacement.
 
 **Mount / GUI:** `Configuration -> Slots` → select VERA → "Configure..." opens
 the `IDD_VERA_SD_CARD` "VERA SD Card" dialog (`PageSlots.cpp`) with
@@ -202,7 +209,8 @@ mounts the image and persists the path to the registry (per-slot section,
 constructor restores the persisted image via `GetSDImagePathFromRegistry()`.
 Changing only the SD image applies immediately (no forced restart).
 `VERACard::Update()` also runs a one-time `TestSDRead()` self-test (reads
-LBA 2048 and logs the FAT32 boot signature to `VERA.log`).
+LBA 2048 and logs the FAT32 boot signature to `VERA.log`). Full SPI protocol
+verification is covered in `test\VERATest\VERATest.cpp` (Test 7).
 
 ---
 

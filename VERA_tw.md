@@ -165,14 +165,16 @@ byte）。`VERACard::SyncSPI()` 在每次存取 VERA 暫存器（`IOReadCx`/`IOW
 **poll SD_STATUS bit 7** 等候傳輸完成。
 
 **支援指令**（SPI 模式）：CMD0、CMD8、CMD9（SEND_CSD）、ACMD41（CMD55+CMD41）、
-CMD12、CMD13、CMD16、CMD17、CMD18、CMD24（寫入）、CMD55、CMD58（READ_OCR）。
+CMD12、CMD13、CMD16、CMD17、CMD18、CMD24（寫入）、CMD25（多區塊寫入）、CMD55、CMD58（READ_OCR）。
 - **CMD58（READ_OCR）**：依 SD SPI 規範回傳 5 位元組 `[R1, 0xC0, 0xFF, 0x80, 0x00]`，首位元組為卡片狀態（閒置為 `0x01`，已初始化為 `0x00`）。
 - **CMD24（WRITE_BLOCK）**：接收起始 token（`0xFE`）、512 位元組資料與 CRC16 後，回覆標準 Data Response Token：寫入成功回覆 `0x05`（接受），超出邊界或唯讀錯誤回覆 `0x0D`（拒絕）。
+- **CMD25（WRITE_MULTIPLE_BLOCK）**：每個 `$FC` token 後接一個 512 位元組資料區塊，完成後自動前進至下一個 LBA；`$FD` 結束連續寫入。CMD24 每個區塊立即 flush，CMD25 在 `$FD` 才 flush 一次，避免 FAT32 格式化時每個 sector 都同步寫入。
+- **寫入保護**：VERA SD Card 對話框提供 **Write Protected** 勾選框，設定會依 slot 保存；啟用後 CMD24/CMD25 回覆 `0x0D`，guest 可辨識 SD 為唯讀。
 - **狀態重設**：實作 `ResetSpiState()`，在卸載 SD 卡或更換映像檔時自動清空 SPI 緩衝區與傳輸狀態。
 
 **掛載 / GUI：** `Configuration -> Slots` → 選 VERA 卡 → 「Configure...」開啟
 `IDD_VERA_SD_CARD`「VERA SD Card」對話框（`PageSlots.cpp`），有「Select Image...」
-與「Unmount」。對話框**不要求** VERA 卡已裝好：選取的路徑會存到
+與「Unmount」及 **Write Protected** 勾選框。對話框**不要求** VERA 卡已裝好：選取的路徑會存到
 `CConfigNeedingRestart::m_VERASDImagePath[slot]`，因此可以一次選好 VERA + SD
 影像再重啟，`ApplyConfigAfterClose()` 會在卡片（重新）插入後以
 `VERACard::SetSDImagePath()` 掛載。`SetSDImagePath()` 掛載影像並把路徑存到

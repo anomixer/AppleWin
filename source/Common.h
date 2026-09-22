@@ -135,6 +135,7 @@ enum AppMode_e
 #define REGVALUE_DISKII_13_SECTOR_FIRMWARE "13-sector Firmware"
 #define REGVALUE_HDC_FIRMWARE "Firmware"
 #define REGVALUE_VERA_SD_IMAGE "SD Card Image"
+#define REGVALUE_VERA_SD_WRITEPROTECT "SD Card Write Protected"
 
 // Preferences 
 #define REG_PREFS                              "Preferences"

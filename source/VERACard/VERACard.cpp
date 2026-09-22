@@ -55,10 +55,11 @@ VERACard::VERACard(UINT slot)
 	// Request the larger (VERA-sized) framebuffer from the Video subsystem.
 	GetVideo().SetVidVERA(true);
 
-	// Restore the persisted SD image (if any) for this slot.
+	// Restore the persisted SD image (if any) and write-protect flag for this slot.
 	const std::string sdPath = GetSDImagePathFromRegistry();
 	if (!sdPath.empty())
 		m_video.SetSDImagePath(sdPath);
+	m_video.SetSDWriteProtected(GetSDWriteProtectFromRegistry());
 }
 
 void VERACard::SetSDImagePath(const std::string& path)
@@ -72,6 +73,18 @@ void VERACard::UnmountSD()
 {
 	m_video.UnmountSD();
 	ClearSDImagePathInRegistry(m_slot);	// clear
+}
+
+void VERACard::SetSDWriteProtected(bool wp)
+{
+	// Apply now, and persist the flag to the registry for this slot.
+	m_video.SetSDWriteProtected(wp);
+	SetSDWriteProtectInRegistry(m_slot, wp);
+}
+
+bool VERACard::GetSDWriteProtectFromRegistry() const
+{
+	return GetSDWriteProtectFromRegistry(m_slot);
 }
 
 std::string VERACard::GetSDImagePathFromRegistry() const
@@ -98,6 +111,21 @@ void VERACard::ClearSDImagePathInRegistry(UINT slot)
 {
 	const std::string regSection = RegGetConfigSlotSection(slot);
 	RegSaveString(regSection.c_str(), REGVALUE_VERA_SD_IMAGE, true, "");	// clear
+}
+
+bool VERACard::GetSDWriteProtectFromRegistry(UINT slot)
+{
+	const std::string regSection = RegGetConfigSlotSection(slot);
+	char value[8] = {};
+	if (RegLoadString(regSection.c_str(), REGVALUE_VERA_SD_WRITEPROTECT, true, value, sizeof(value)))
+		return value[0] == '1';
+	return false;
+}
+
+void VERACard::SetSDWriteProtectInRegistry(UINT slot, bool wp)
+{
+	const std::string regSection = RegGetConfigSlotSection(slot);
+	RegSaveString(regSection.c_str(), REGVALUE_VERA_SD_WRITEPROTECT, true, wp ? "1" : "0");
 }
 
 bool VERACard::TestSDRead()

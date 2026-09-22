@@ -439,14 +439,18 @@ void CPageSlots::ApplyConfigAfterClose()
 		VERACard& card = dynamic_cast<VERACard&>(GetCardMgr().GetRef(slot));
 		const std::string& pathname = m_PropertySheetHelper.GetConfigNew().m_VERASDImagePath[slot];
 
-		if (card.GetSDImagePathFromRegistry() == pathname)
-			continue;
+		if (card.GetSDImagePathFromRegistry() != pathname)
+		{
+			// Mount the selected image (SetSDImagePath also persists it to the registry).
+			if (pathname.empty())
+				card.UnmountSD();
+			else
+				card.SetSDImagePath(pathname);
+		}
 
-		// Mount the selected image (SetSDImagePath also persists it to the registry).
-		if (pathname.empty())
-			card.UnmountSD();
-		else
-			card.SetSDImagePath(pathname);
+		// Apply the write-protect checkbox (persisted to the registry) even if the
+		// image path didn't change.
+		card.SetSDWriteProtected(m_PropertySheetHelper.GetConfigNew().m_VERASDWriteProtect[slot]);
 	}
 
 	// SSC
@@ -1542,6 +1546,15 @@ INT_PTR CPageSlots::DlgProcVERAInternal(HWND hWnd, UINT message, WPARAM wparam, 
 		}
 		break;
 
+		case IDC_SLOT_OPT_VERA_SD_WRITEPROTECT:
+		{
+			// Store the checkbox state in the pending config; applied to the live
+			// card by ApplyConfigAfterClose (persisted to the registry there).
+			const bool wp = SendMessage(GetDlgItem(hWnd, IDC_SLOT_OPT_VERA_SD_WRITEPROTECT), BM_GETCHECK, 0, 0) == BST_CHECKED;
+			m_PropertySheetHelper.GetConfigNew().m_VERASDWriteProtect[ms_slot] = wp;
+		}
+		break;
+
 		case IDOK:
 			EndDialog(hWnd, 0);
 			break;
@@ -1563,6 +1576,8 @@ INT_PTR CPageSlots::DlgProcVERAInternal(HWND hWnd, UINT message, WPARAM wparam, 
 	{
 		const std::string& path = m_PropertySheetHelper.GetConfigNew().m_VERASDImagePath[ms_slot];
 		SetDlgItemText(hWnd, IDC_SLOT_OPT_VERA_SD_IMAGE, path.c_str());
+		const bool wp = m_PropertySheetHelper.GetConfigNew().m_VERASDWriteProtect[ms_slot];
+		CheckDlgButton(hWnd, IDC_SLOT_OPT_VERA_SD_WRITEPROTECT, wp ? BST_CHECKED : BST_UNCHECKED);
 	}
 	break;
 

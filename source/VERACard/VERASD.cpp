@@ -19,6 +19,7 @@ static const int XSEEK_SET = 0;
 VERASD::VERASD()
 {
 	Reset();
+	m_write_protected = false;
 }
 
 VERASD::~VERASD()
@@ -139,13 +140,16 @@ bool VERASD::ReadBlock(uint32_t lba, uint8_t* dest512)
 	return fread(dest512, 1, 512, m_sdcard_file) == 512;
 }
 
-bool VERASD::WriteBlock(uint32_t lba, const uint8_t* src512)
+bool VERASD::WriteBlock(uint32_t lba, const uint8_t* src512, bool flush)
 {
+	if (m_write_protected)
+		return false;
 	if (!SeekBlock(lba))
 		return false;
 	if (fwrite(src512, 1, 512, m_sdcard_file) != 512)
 		return false;
-	fflush(m_sdcard_file);	// persist immediately (SD card write semantics)
+	if (flush && fflush(m_sdcard_file) != 0)
+		return false;
 	return true;
 }
 
@@ -412,6 +416,16 @@ uint8_t VERASD::HandleByte(uint8_t inbyte)
 	}
 	else
 	{
+		// CMD25 ends with a one-byte stop token, not a 515-byte data packet.
+		if (m_last_cmd == CMD25 && m_rxbuf_idx == 0 && inbyte == 0xFD)
+		{
+			// CMD25 is one sequential host write.  Flushing each 512-byte block
+			// makes multi-block formatting no faster than CMD24; persist the whole
+			// run at its stop token instead.
+			fflush(m_sdcard_file);
+			m_last_cmd = -1;
+			return outbyte;
+		}
 		m_rxbuf[m_rxbuf_idx++] = inbyte;
 		if ((m_rxbuf[0] & 0xC0) == 0x40 && m_rxbuf_idx == 6)
 		{
@@ -504,6 +518,20 @@ uint8_t VERASD::HandleByte(uint8_t inbyte)
 					SetResponseR1();
 				}
 				break;
+			case CMD25:
+				// WRITE_MULTIPLE_BLOCK: $FC starts each 512-byte block, $FD stops.
+				m_lba = (uint32_t)(((uint32_t)m_rxbuf[1] << 24) | ((uint32_t)m_rxbuf[2] << 16) | ((uint32_t)m_rxbuf[3] << 8) | m_rxbuf[4]);
+				if (m_rxbuf_idx > 4 && (uint64_t)m_lba * 512 >= FileSizeBytes())
+				{
+					m_response[0] = 0x00;
+					m_response[1] = 0x08;
+					m_response_length = 2;
+				}
+				else
+				{
+					SetResponseR1();
+				}
+				break;
 			case CMD55:
 				// APP_CMD: Next command is an application specific command
 				m_is_acmd = true;
@@ -523,11 +551,14 @@ uint8_t VERASD::HandleByte(uint8_t inbyte)
 		{
 			m_rxbuf_idx = 0;
 			// Check for 'start block' byte
-			if (m_last_cmd == CMD24 && m_rxbuf[0] == 0xFE)
+			if ((m_last_cmd == CMD24 && m_rxbuf[0] == 0xFE) ||
+				(m_last_cmd == CMD25 && m_rxbuf[0] == 0xFC))
 			{
 				bool written = false;
 				if ((uint64_t)m_lba * 512 < FileSizeBytes())
-					written = WriteBlock(m_lba, m_rxbuf + 1);
+					written = WriteBlock(m_lba, m_rxbuf + 1, m_last_cmd != CMD25);
+				if (written && m_last_cmd == CMD25)
+					m_lba++;
 				// 0x05 = Data accepted, 0x0D = Data rejected due to write error / write protection
 				m_response[0] = written ? 0x05 : 0x0D;
 				m_response_length = 1;

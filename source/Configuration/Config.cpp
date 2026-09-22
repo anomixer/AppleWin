@@ -96,6 +96,7 @@ void CConfigNeedingRestart::ResetAllCardOptions(UINT slot)
 		m_slotInfoForHDC[slot].pathname[i] = "";
 
 	m_VERASDImagePath[slot] = "";
+	m_VERASDWriteProtect[slot] = false;
 
 	m_SaturnMemorySize[slot] = 0;
 
@@ -171,7 +172,9 @@ void CConfigNeedingRestart::Reload()
 		}
 		else if (m_Slot[slot] == CT_VERA)
 		{
-			m_VERASDImagePath[slot] = dynamic_cast<VERACard&>(cardManager.GetRef(slot)).GetSDImagePathFromRegistry();
+			VERACard& card = dynamic_cast<VERACard&>(cardManager.GetRef(slot));
+			m_VERASDImagePath[slot] = card.GetSDImagePathFromRegistry();
+			m_VERASDWriteProtect[slot] = card.GetSDWriteProtectFromRegistry();
 		}
 		else if (m_Slot[slot] == CT_MockingboardC || m_Slot[slot] == CT_Phasor)
 		{
@@ -255,6 +258,7 @@ const CConfigNeedingRestart& CConfigNeedingRestart::operator= (const CConfigNeed
 		for (UINT i = HARDDISK_1; i < NUM_HARDDISKS; i++)
 			m_slotInfoForHDC[slot].pathname[i] = other.m_slotInfoForHDC[slot].pathname[i];
 		m_VERASDImagePath[slot] = other.m_VERASDImagePath[slot];
+		m_VERASDWriteProtect[slot] = other.m_VERASDWriteProtect[slot];
 	}
 
 	// Advanced

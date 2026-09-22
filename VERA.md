@@ -194,12 +194,19 @@ CMD12, CMD13, CMD16, CMD17, CMD18, CMD24 (write), CMD55, CMD58 (READ_OCR).
   `[R1, 0xC0, 0xFF, 0x80, 0x00]` with R1 indicating card status (`0x01` idle, `0x00` active).
 - **CMD24 (WRITE_BLOCK)**: Receives start token (`0xFE`), 512-byte payload, and
   CRC16, responding with Data Response Token `0x05` (accepted) or `0x0D` (write error / write protection).
+  A guest (e.g. `verasdedit`) reads this token to detect write-protection: `0x0D`
+  means the image is read-only (`OpenFile` fell back to `rb` when `r+b` failed,
+  so `WriteBlock`'s `fwrite` fails), or the SD write-protect checkbox is checked
+  (`VERASD::WriteBlock` returns false when `m_write_protected` is set), and the
+  guest reports the SD as write-protected.
 - **State reset**: `ResetSpiState()` clears SPI shift buffers, command phase,
   and transfer state upon card unmount or image replacement.
 
 **Mount / GUI:** `Configuration -> Slots` → select VERA → "Configure..." opens
 the `IDD_VERA_SD_CARD` "VERA SD Card" dialog (`PageSlots.cpp`) with
-"Select Image..." / "Unmount". The dialog does **not** require the VERA card to
+"Select Image..." / "Unmount" and a **"Write Protected"** checkbox (forces
+CMD24 → `0x0D`, persisted per-slot via `REGVALUE_VERA_SD_WRITEPROTECT`).
+The dialog does **not** require the VERA card to
 be installed yet: the selected path is stored in
 `CConfigNeedingRestart::m_VERASDImagePath[slot]`, so you can pick VERA + SD
 image in one go and restart. `ApplyConfigAfterClose()` then mounts it via

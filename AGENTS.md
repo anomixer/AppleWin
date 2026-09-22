@@ -142,20 +142,32 @@ Key integration points:
   > (a horizontal break at a random row) in SD-SLIDES / SD-HIRES. Advancing per
   > register access fixes both.
 - **Commands** (SPI mode): CMD0, CMD8, CMD9 (SEND_CSD), ACMD41 (CMD55+CMD41),
-  CMD12, CMD13, CMD16, CMD17, CMD18, CMD24 (write), CMD55, CMD58 (READ_OCR).
+  CMD12, CMD13, CMD16, CMD17, CMD18, CMD24 (write), CMD25 (multi-block
+  write), CMD55, CMD58 (READ_OCR).
   - **CMD58 (READ_OCR)**: Returns 5 bytes according to SD SPI specification:
     `[R1, 0xC0, 0xFF, 0x80, 0x00]` where the initial byte is R1 (`0x01` if idle,
     `0x00` if card initialized).
   - **CMD24 (WRITE_BLOCK)**: After receiving data packet (`0xFE` + 512 bytes +
     2-byte CRC), responds with standard Data Response Token: `0x05` for accepted
-    write, or `0x0D` for rejected write (e.g. out-of-range LBA or read-only image).
+    write, or `0x0D` for rejected write (e.g. out-of-range LBA, read-only image,
+    or the SD write-protect checkbox is checked).
+  - **CMD25 (WRITE_MULTIPLE_BLOCK)**: Each `$FC` + 512-byte packet writes the
+    current LBA and advances it; `$FD` ends the run. CMD25 buffers host writes
+    across its blocks and calls `fflush()` once at `$FD`. CMD24 still flushes
+    immediately. Do not restore an `fflush()` per CMD25 block: it eliminates the
+    purpose of multi-block writes and makes FAT32 formatting dramatically slower.
   - **State reset**: `ResetSpiState()` resets all transmission buffers, counters,
     and flags (`m_selected`, `m_busy`, `m_rxbuf_idx`, `m_response_length`,
     `m_ongoing_multiblock_read`, etc.) upon `Reset()`, `Unmount()`, or attaching
     a new image in `OpenFile()`.
 - **Mount / GUI**: `Configuration -> Slots` → select VERA → "Configure..."
   opens the `IDD_VERA_SD_CARD` "VERA SD Card" dialog (`PageSlots.cpp`) with
-  "Select Image..." / "Unmount". The dialog does **not** require the VERA card
+  "Select Image..." / "Unmount" and a **"Write Protected"** checkbox. Checking
+  it forces CMD24 to return `0x0D` (write rejected) regardless of the image's
+  actual write permission, so write-protection is testable from the GUI. The
+  flag is persisted per-slot (`REGVALUE_VERA_SD_WRITEPROTECT` = "SD Card Write
+  Protected") and applied via `VERACard::SetSDWriteProtected()`; `WriteBlock`
+  returns false when set. The dialog does **not** require the VERA card
   to be installed yet — the selected path is stored in
   `CConfigNeedingRestart::m_VERASDImagePath[slot]` (not the live card), so you
   can pick VERA + SD image in one go and restart: `ApplyConfigAfterClose()`

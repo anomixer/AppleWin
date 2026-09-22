@@ -33,6 +33,11 @@ public:
 	bool IsMounted() const { return m_sdcard_attached; }
 	const std::string& GetPath() const { return m_sdcard_path; }
 
+	// Write protection: when set, CMD24 (WRITE_BLOCK) is rejected with the
+	// data-response token 0x0D (write-protected) instead of writing the image.
+	void SetWriteProtected(bool wp) { m_write_protected = wp; }
+	bool IsWriteProtected() const { return m_write_protected; }
+
 	// SPI register access (reg = $9F3E & 1 selects DATA, $9F3F & 1 selects STATUS).
 	uint8_t SpiRead(int reg);
 	void SpiWrite(int reg, uint8_t value);
@@ -57,6 +62,7 @@ private:
 	static const int CMD17 = 17;
 	static const int CMD18 = 18;
 	static const int CMD24 = 24;
+	static const int CMD25 = 25;
 	static const int CMD55 = 55;
 	static const int CMD58 = 58;
 
@@ -66,7 +72,7 @@ private:
 	bool SeekBlock(uint32_t lba);
 	uint32_t FileSizeBytes();
 	bool ReadBlock(uint32_t lba, uint8_t* dest512);
-	bool WriteBlock(uint32_t lba, const uint8_t* src512);
+	bool WriteBlock(uint32_t lba, const uint8_t* src512, bool flush = true);
 
 	uint8_t HandleByte(uint8_t inbyte);
 	void SetResponseR1();
@@ -81,6 +87,7 @@ private:
 	FILE* m_sdcard_file;
 	std::string m_sdcard_path;
 	bool m_sdcard_attached;
+	bool m_write_protected;
 	bool m_selected;
 	bool m_busy;
 	bool m_autotx;

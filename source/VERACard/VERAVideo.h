@@ -52,6 +52,8 @@ public:
 	void SetSDImagePath(const std::string& path) { m_sd.SetPath(path); }
 	void UnmountSD() { m_sd.Unmount(); }
 	bool IsSDMounted() const { return m_sd.IsMounted(); }
+	void SetSDWriteProtected(bool wp) { m_sd.SetWriteProtected(wp); }
+	bool IsSDWriteProtected() const { return m_sd.IsWriteProtected(); }
 	bool TestSDReadBlock(uint32_t lba, uint8_t* dest512) { return m_sd.TestReadBlock(lba, dest512); }
 
 	// Register-state serialization for save-state (fixed-size byte buffer).

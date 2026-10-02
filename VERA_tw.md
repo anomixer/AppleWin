@@ -226,6 +226,18 @@ Release\AppleWin.exe -s2 vera -s7 hdc -h1 "C:\dev\Time-Pilot\TimePilot-IIvera\Ti
 - `-h1 <image>`：Slot 7 硬碟第 1 顆影像（`-h2` 為第 2 顆）。
 - 啟動後先顯示 Apple II 畫面（DOS/ProDOS），軟體啟用 VERA 後自動切到 VERA 畫面。
 
+### 自動化測試與驗證
+
+為了方便自動化腳本或進階除錯測試，AppleWin 支援在指定的週期後自動結束並匯出狀態：
+
+```powershell
+Release\AppleWin.exe -s2 vera -run-cycles 5000000 -vera-dump "dump.bin" -save-state "state.aws"
+```
+
+- `-run-cycles <N>`：讓模擬器執行 `N` 個 CPU 週期後自動關閉。
+- `-vera-dump <檔案>`：在自動關閉時，將 128KB 的 VERA VRAM 完整傾印到指定二進位檔。
+- `-save-state <檔案>`：在自動關閉時，自動儲存 AppleWin 的狀態快照。
+
 ### 圖形介面
 
 在「Slot」設定頁的下拉選單中選擇 VERA 卡（`CT_VERA`）即可。

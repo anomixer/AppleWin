@@ -334,6 +334,10 @@ IIgs, only-VERA, and VERA+VidHD combinations.
   Start-Sleep 15; Get-Process -Id $p.Id
   Stop-Process -Id $p.Id -Force
   ```
+- Automated verification (headless): run the emulator for a fixed number of CPU cycles and auto-exit to dump VERA VRAM and save state. Useful for CI/CD or testing script automation.
+  ```powershell
+  & $exe -s2 vera -run-cycles 5000000 -vera-dump "dump.bin" -save-state "state.aws"
+  ```
 
 ## Conventions
 

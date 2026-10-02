@@ -263,6 +263,18 @@ Release\AppleWin.exe -s2 vera -s7 hdc -h1 "C:\dev\Time-Pilot\TimePilot-IIvera\Ti
 - On startup the Apple II screen is shown (DOS/ProDOS); when software enables
   VERA it switches to the VERA screen.
 
+### Automated Testing and Verification
+
+For automated scripts or advanced testing, AppleWin supports running for a specified number of cycles and then auto-exiting to export state:
+
+```powershell
+Release\AppleWin.exe -s2 vera -run-cycles 5000000 -vera-dump "dump.bin" -save-state "state.aws"
+```
+
+- `-run-cycles <N>`: Run the emulator for `N` CPU cycles, then auto-exit.
+- `-vera-dump <file>`: On auto-exit, dump the entire 128KB VERA VRAM to a binary file.
+- `-save-state <file>`: On auto-exit, automatically save the AppleWin snapshot state.
+
 ### GUI
 
 Select the VERA card (`CT_VERA`) in the "Slot" settings page dropdown.

@@ -52,6 +52,9 @@ struct CmdLine
 		szSnapshotName = NULL;
 		snapshotIgnoreHdcFirmware = false;
 		szScreenshotFilename = NULL;
+		saveStateFilename = NULL;
+		veraDumpFilename = NULL;
+		runCycles = 0;
 		uHarddiskNumBlocks = 0;
 		uRamWorksExPages = 0;
 		uSaturnBanks = 0;
@@ -105,6 +108,9 @@ struct CmdLine
 	LPSTR szSnapshotName;
 	bool snapshotIgnoreHdcFirmware;
 	LPSTR szScreenshotFilename;
+	LPSTR saveStateFilename;	// -save-state <file>: save state at auto-exit
+	LPSTR veraDumpFilename;		// -vera-dump <file>: dump VERA VRAM at auto-exit
+	UINT64 runCycles;			// -run-cycles <N>: run N CPU cycles then auto-exit
 	UINT uRamWorksExPages;
 	UINT uSaturnBanks;
 	int newVideoType;

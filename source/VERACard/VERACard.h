@@ -88,6 +88,9 @@ public:
 	// AppleWin video framebuffer (as bgra_t).
 	void UpdateDisplay();
 
+	// Write the full 128KB VERA video RAM to a binary file (for verification).
+	void DumpVideoRAM(const char* path);
+
 private:
 	void UpdateSound();
 	void InitAudio();
@@ -113,3 +116,7 @@ private:
 	VERAAudio m_audio;
 	VERAVideo m_video;
 };
+
+// Dump the VERA video RAM (128KB) of the installed VERA card to `path`.
+// No-op if no VERA card is installed. Used for verification.
+void VERADumpToFile(const char* path);

@@ -13,6 +13,7 @@
 #include "Common.h"
 #include "Core.h"
 #include "CPU.h"
+#include "CardManager.h"
 #include "Interface.h"
 #include "Log.h"
 #include "Memory.h"
@@ -295,6 +296,12 @@ BYTE __stdcall VERACard::IOWriteCx(WORD pc, WORD addr, BYTE bWrite, BYTE value, 
 	CpuCalcCycles(nExecutedCycles);	// make g_nCumulativeCycles accurate at this write (IO reads are batched)
 	pCard->SyncVideo();	// keep the scanline register live at this exact cycle
 	pCard->SyncSPI();	// advance the SD SPI so a byte sent by the guest starts clocking
+	// DATA0 is the framebuffer streaming port. A DHGR refresh writes over
+	// 13,000 bytes; logging each byte reopens VERA.log for every write and can
+	// make an interactive display refresh appear to hang. Keep register and
+	// control-port writes in the diagnostic log, but omit pixel stream data.
+	if ((addr & 0x1f) != 0x03)
+		LogWriteVERALog("VERASD IO write $%04X=$%02X (slot %d)\n", addr, value, slot);
 	pCard->m_video.Write(static_cast<uint8_t>(addr & 0xff), value);
 	return 0;
 }
@@ -510,4 +517,27 @@ bool VERACard::LoadSnapshot(YamlLoadHelper& yamlLoadHelper, UINT version)
 
 	yamlLoadHelper.PopMap();	// state
 	return true;
+}
+
+// ---------------------------------------------------------------------------
+// Verification helper: dump the full 128KB VERA video RAM to a binary file.
+
+void VERACard::DumpVideoRAM(const char* path)
+{
+	if (!path)
+		return;
+	FILE* f = fopen(path, "wb");
+	if (!f)
+		return;
+	fwrite(m_video.GetVideoRAM(), 1, m_video.GetVideoRAMSize(), f);
+	fclose(f);
+}
+
+void VERADumpToFile(const char* path)
+{
+	if (!path)
+		return;
+	VERACard* vc = GetCardMgr().GetVERACard();
+	if (vc)
+		vc->DumpVideoRAM(path);
 }

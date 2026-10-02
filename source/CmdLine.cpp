@@ -407,6 +407,24 @@ bool ProcessCmdLine(LPSTR lpCmdLine)
 		{
 			g_cmdLine.snapshotIgnoreHdcFirmware = true;
 		}
+		else if (strcmp(lpCmdLine, "-save-state") == 0)	// For verification: save state at auto-exit
+		{
+			lpCmdLine = GetCurrArg(lpNextArg);
+			lpNextArg = GetNextArg(lpNextArg);
+			g_cmdLine.saveStateFilename = lpCmdLine;
+		}
+		else if (strcmp(lpCmdLine, "-vera-dump") == 0)	// For verification: dump VERA VRAM at auto-exit
+		{
+			lpCmdLine = GetCurrArg(lpNextArg);
+			lpNextArg = GetNextArg(lpNextArg);
+			g_cmdLine.veraDumpFilename = lpCmdLine;
+		}
+		else if (strcmp(lpCmdLine, "-run-cycles") == 0)	// For verification: run N CPU cycles then auto-exit
+		{
+			lpCmdLine = GetCurrArg(lpNextArg);
+			lpNextArg = GetNextArg(lpNextArg);
+			g_cmdLine.runCycles = strtoull(lpCmdLine, NULL, 10);
+		}
 		else if (strcmp(lpCmdLine, "-f") == 0 || strcmp(lpCmdLine, "-full-screen") == 0)
 		{
 			g_cmdLine.setFullScreen = 1;

@@ -191,6 +191,7 @@ void VERASD::SpiWrite(int reg, uint8_t value)
 		}
 		break;
 	case 1:
+		LogWriteVERALog("VERASD SPI ctrl $%02X (selBefore=%d busy=%d)\n", value, m_selected, m_busy);
 		if ((m_selected ? 1 : 0) != (value & 1))
 		{
 			m_selected = (value & 1) != 0;

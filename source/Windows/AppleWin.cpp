@@ -37,6 +37,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "Keyboard.h"
 #include "Log.h"
 #include "Memory.h"
+#include "CPU.h"
 #include "Mockingboard.h"
 #include "MouseInterface.h"
 #include "ParallelPrinter.h"
@@ -47,11 +48,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "Speaker.h"
 #include "LanguageCard.h"
 #include "CardManager.h"
+#include "VERACard/VERACard.h"
 #ifdef USE_SPEECH_API
 #include "Speech.h"
 #endif
 #include "Windows/Win32Frame.h"
 #include "Windows/DXSoundBuffer.h"
+#include <direct.h>	// _mkdir for verification save path
 #include "RGBMonitor.h"
 #include "NTSC.h"
 
@@ -134,6 +137,35 @@ void SetPriorityNormal()
 
 static UINT g_uModeStepping_Cycles = 0;
 static bool g_uModeStepping_LastGetKey_ScrollLock = false;
+
+// Verification helpers: when g_runCyclesTarget is reached, save state, dump
+// VERA VRAM, take the screenshot and shut down. Set only from the command line.
+static UINT64 g_runCyclesTarget = 0;
+static bool g_autoExitDone = false;
+
+// Create every directory level leading to `path`'s parent (no-op if present).
+// Avoids the "Save State" error dialog when the output folder doesn't exist.
+static void EnsureParentDirExists(const char* path)
+{
+	if (!path)
+		return;
+	std::string p(path);
+	size_t n = p.find_last_of("\\/");
+	if (n == std::string::npos)
+		return;
+	std::string dir = p.substr(0, n);
+	size_t i = 0;
+	while (i < dir.size())
+	{
+		size_t j = dir.find_first_of("\\/", i);
+		if (j == std::string::npos)
+			j = dir.size();
+		std::string sub = dir.substr(0, j);
+		if (!sub.empty())
+			_mkdir(sub.c_str());
+		i = j + 1;
+	}
+}
 
 static void ContinueExecution()
 {
@@ -228,6 +260,24 @@ static void ContinueExecution()
 	g_dwCyclesThisFrame += uActualCyclesExecuted;
 
 	GetCardMgr().Update(uActualCyclesExecuted);
+
+	// Verification: run N cycles then save state, dump VERA VRAM, screenshot, exit.
+	if (g_runCyclesTarget > 0 && !g_autoExitDone && g_nCumulativeCycles >= g_runCyclesTarget)
+	{
+		g_autoExitDone = true;
+		if (g_cmdLine.saveStateFilename)
+		{
+			EnsureParentDirExists(g_cmdLine.saveStateFilename);
+			Snapshot_SetFilename(g_cmdLine.saveStateFilename);
+			Snapshot_SaveState();
+		}
+		if (g_cmdLine.veraDumpFilename)
+			VERADumpToFile(g_cmdLine.veraDumpFilename);
+		if (g_cmdLine.szScreenshotFilename)
+			GetFrame().Video_RedrawAndTakeScreenShot(g_cmdLine.szScreenshotFilename);
+		g_cmdLine.bShutdown = true;
+		PostMessage(GetFrame().g_hFrameWindow, WM_DESTROY, 0, 0);
+	}
 
 	//
 
@@ -1008,7 +1058,13 @@ static void RepeatInitialization()
 		LogFileOutput("Main: Snapshot_Startup()\n");
 	}
 
-	if (g_cmdLine.szScreenshotFilename)
+	if (g_cmdLine.runCycles > 0)
+	{
+		// Defer the save-state / VERA dump / screenshot to ContinueExecution,
+		// which runs them once g_nCumulativeCycles reaches the target.
+		g_runCyclesTarget = g_cmdLine.runCycles;
+	}
+	else if (g_cmdLine.szScreenshotFilename)
 	{
 		GetFrame().Video_RedrawAndTakeScreenShot(g_cmdLine.szScreenshotFilename);
 		g_cmdLine.bShutdown = true;

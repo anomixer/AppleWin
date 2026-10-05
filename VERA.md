@@ -9,6 +9,8 @@ core is a C++ port of `apple2ts`'s TypeScript implementation
 > For the development architecture, build workflow and debugging notes,
 > see `AGENTS.md`.
 
+> **Note:** This fork is currently synced with AppleWin upstream release **v1.32.1.0**.
+
 ---
 
 ## 1. Overview

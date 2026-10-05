@@ -14,6 +14,8 @@ provides a 640×480 VGA/NTSC graphics core, a 16-channel PSG + PCM audio core,
 and an IRQ line. The core is a C++ port of `apple2ts`'s TypeScript VERA
 (`src/worker/devices/vera/video.ts`, `pcm.ts`, `vera-psg.js`).
 
+> **Note:** This fork is synced with upstream AppleWin **v1.32.1.0**.
+
 ## Build workflow
 
 MSBuild (Visual Studio 2022) is used from the command line. **Always build via

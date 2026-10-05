@@ -17,7 +17,7 @@
 ```
 fork/master = <squash commit>   (https://github.com/anomixer/AppleWin)   ← 已 push（hash 見 `git log`）
 local master = <squash commit>
-HEAD         = master
+HEAD         = feat/vera (已合併上游 v1.32.1.0)
 工作樹：乾淨
 ```
 

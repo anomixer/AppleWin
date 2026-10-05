@@ -65,9 +65,9 @@ Behaviour:
 Running
 =======
 
-Download latest (stable) release: [AppleWin v1.31.0.0](https://github.com/AppleWin/AppleWin/releases/download/v1.31.0.0/AppleWin1.31.0.0.zip)
+Download latest (stable) release: [AppleWin v1.32.0.0](https://github.com/AppleWin/AppleWin/releases/download/v1.32.0.0/AppleWin1.32.0.0.zip)
 
-Release Notes: [v1.31.0.0](https://github.com/AppleWin/AppleWin/releases/tag/v1.31.0.0)
+Release Notes: [v1.32.0.0](https://github.com/AppleWin/AppleWin/releases/tag/v1.32.0.0)
 
 
 Building

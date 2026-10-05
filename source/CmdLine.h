@@ -40,6 +40,7 @@ struct CmdLine
 		bBoot = false;
 		bSlot7EmptyOnExit = false;
 		bSwapButtons0and1 = false;
+		noJoystick[0] = noJoystick [1]= false;
 		bRemoveNoSlotClock = false;
 		snesMaxAltControllerType[0] = false;
 		snesMaxAltControllerType[1] = false;
@@ -91,6 +92,7 @@ struct CmdLine
 	bool bBoot;
 	bool bSlot7EmptyOnExit;
 	bool bSwapButtons0and1;
+	bool noJoystick[2];
 	bool bRemoveNoSlotClock;
 	bool snesMaxAltControllerType[2];
 	bool supportDCD;

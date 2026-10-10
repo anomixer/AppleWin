@@ -61,6 +61,7 @@ VERACard::VERACard(UINT slot)
 	if (!sdPath.empty())
 		m_video.SetSDImagePath(sdPath);
 	m_video.SetSDWriteProtected(GetSDWriteProtectFromRegistry());
+	m_bFMEnabled = GetFMEnabledFromRegistry();
 }
 
 void VERACard::SetSDImagePath(const std::string& path)
@@ -81,6 +82,32 @@ void VERACard::SetSDWriteProtected(bool wp)
 	// Apply now, and persist the flag to the registry for this slot.
 	m_video.SetSDWriteProtected(wp);
 	SetSDWriteProtectInRegistry(m_slot, wp);
+}
+
+void VERACard::SetFMEnabled(bool enabled)
+{
+	m_bFMEnabled = enabled;
+	SetFMEnabledInRegistry(m_slot, enabled);
+}
+
+bool VERACard::GetFMEnabledFromRegistry() const
+{
+	return GetFMEnabledFromRegistry(m_slot);
+}
+
+bool VERACard::GetFMEnabledFromRegistry(UINT slot)
+{
+	const std::string regSection = RegGetConfigSlotSection(slot);
+	char value[8] = {};
+	if (RegLoadString(regSection.c_str(), REGVALUE_VERA_FM_ENABLED, true, value, sizeof(value)))
+		return value[0] == '1';
+	return true;	// default: enabled (FM module ships with the A2VERA kit)
+}
+
+void VERACard::SetFMEnabledInRegistry(UINT slot, bool enabled)
+{
+	const std::string regSection = RegGetConfigSlotSection(slot);
+	RegSaveString(regSection.c_str(), REGVALUE_VERA_FM_ENABLED, true, enabled ? "1" : "0");
 }
 
 bool VERACard::GetSDWriteProtectFromRegistry() const
@@ -173,6 +200,7 @@ void VERACard::Reset(const bool powerCycle)
 {
 	m_video.Reset();	// also resets audio (m_audio)
 	m_audio.SetSampleRate(kSampleRate);
+	m_ym.Reset();
 
 	m_lastVideoUpdateCycle = 0;
 	m_lastVideoCycles = 0;
@@ -283,6 +311,10 @@ BYTE __stdcall VERACard::IOReadCx(WORD pc, WORD addr, BYTE bWrite, BYTE value, U
 	CpuCalcCycles(nExecutedCycles);	// make g_nCumulativeCycles accurate at this read (IO reads are batched)
 	pCard->SyncVideo();	// keep the scanline register live at this exact cycle
 	pCard->SyncSPI();	// advance the SD SPI so a guest's BUSY poll sees the byte ready
+	if ((addr & 0xff) == 0x20 && pCard->m_bFMEnabled)
+		return 0;	// YM_REG is write-only
+	if ((addr & 0xff) == 0x21 && pCard->m_bFMEnabled)
+		return pCard->m_ym.ReadData();	// YM_DATA: status
 	return pCard->m_video.Read(static_cast<uint8_t>(addr & 0xff), false);
 }
 
@@ -296,6 +328,16 @@ BYTE __stdcall VERACard::IOWriteCx(WORD pc, WORD addr, BYTE bWrite, BYTE value, 
 	CpuCalcCycles(nExecutedCycles);	// make g_nCumulativeCycles accurate at this write (IO reads are batched)
 	pCard->SyncVideo();	// keep the scanline register live at this exact cycle
 	pCard->SyncSPI();	// advance the SD SPI so a byte sent by the guest starts clocking
+	if ((addr & 0xff) == 0x20 && pCard->m_bFMEnabled)
+	{
+		pCard->m_ym.WriteRegSelect(value);
+		return 0;
+	}
+	if ((addr & 0xff) == 0x21 && pCard->m_bFMEnabled)
+	{
+		pCard->m_ym.WriteData(value);
+		return 0;
+	}
 	// DATA0 is the framebuffer streaming port. A DHGR refresh writes over
 	// 13,000 bytes; logging each byte reopens VERA.log for every write and can
 	// make an interactive display refresh appear to hang. Keep register and
@@ -438,6 +480,18 @@ void VERACard::UpdateSound()
 
 	// Generate the samples from the VERA audio core.
 	m_audio.Render(m_mixBuffer.data(), nNumSamples);
+
+	// Mix in the FM (YM2151) daughterboard, if present.
+	if (m_ymBuffer.size() < static_cast<size_t>(nNumSamples * kNumChannels))
+		m_ymBuffer.resize(nNumSamples * kNumChannels);
+	m_ym.Render(m_ymBuffer.data(), nNumSamples);
+	for (int i = 0; i < nNumSamples * (int)kNumChannels; ++i)
+	{
+		int mixed = static_cast<int>(m_mixBuffer[i]) + static_cast<int>(m_ymBuffer[i]);
+		if (mixed > 32767) mixed = 32767;
+		if (mixed < -32768) mixed = -32768;
+		m_mixBuffer[i] = static_cast<short>(mixed);
+	}
 
 	short* pLocked0;
 	short* pLocked1;

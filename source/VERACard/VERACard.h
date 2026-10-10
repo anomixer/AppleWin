@@ -17,6 +17,7 @@
 #include "Card.h"
 #include "SoundCore.h"
 #include "VERAAudio.h"
+#include "VERAYM.h"
 #include "VERAVideo.h"
 
 #include <vector>
@@ -78,6 +79,15 @@ public:
 	static bool GetSDWriteProtectFromRegistry(UINT slot);
 	static void SetSDWriteProtectInRegistry(UINT slot, bool wp);
 
+	// FM (YM2151) enable: gated by the "Enable FM Chip" checkbox. When false,
+	// the YM_REG/YM_DATA offsets ($Cs20/$Cs21) fall through to the normal VERA
+	// register handler, mirroring no FM hardware.
+	void SetFMEnabled(bool enabled);
+	bool IsFMEnabled() const { return m_bFMEnabled; }
+	bool GetFMEnabledFromRegistry() const;
+	static bool GetFMEnabledFromRegistry(UINT slot);
+	static void SetFMEnabledInRegistry(UINT slot, bool enabled);
+
 	// Self-test: read block 0 (and the FAT32 boot signature) through the SPI,
 	// logging the result to VERA.log. Returns true if the SPI read succeeds.
 	bool TestSDRead();
@@ -103,6 +113,7 @@ private:
 
 	ULONG m_lastVideoUpdateCycle;
 	bool m_bSDTested;	// SD self-test done once after mount
+	bool m_bFMEnabled = true;	// FM (YM2151) daughterboard enabled
 	uint64_t m_lastVideoCycles;	// cumulative cycle count when the VERA video was last advanced
 	uint64_t m_lastSDCycles;	// cumulative cycle count when the VERA SD SPI was last advanced
 	ULONGLONG m_lastSoundTick;	// real-time ms when UpdateSound last ran (stall detection)
@@ -111,9 +122,11 @@ private:
 	double m_sampleAccum;	// fractional sample accumulator (exact sample gen)
 	bool m_bFrameCleared;
 	std::vector<short> m_mixBuffer;
+	std::vector<short> m_ymBuffer;
 
 	// Audio must be constructed before video (video holds a pointer to audio)
 	VERAAudio m_audio;
+	VERAYM m_ym;
 	VERAVideo m_video;
 };
 

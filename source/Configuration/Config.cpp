@@ -98,6 +98,7 @@ void CConfigNeedingRestart::ResetAllCardOptions(UINT slot)
 
 	m_VERASDImagePath[slot] = "";
 	m_VERASDWriteProtect[slot] = false;
+	m_VERAFMEnabled[slot] = true;
 
 	m_SaturnMemorySize[slot] = 0;
 
@@ -177,6 +178,7 @@ void CConfigNeedingRestart::Reload()
 			VERACard& card = dynamic_cast<VERACard&>(cardManager.GetRef(slot));
 			m_VERASDImagePath[slot] = card.GetSDImagePathFromRegistry();
 			m_VERASDWriteProtect[slot] = card.GetSDWriteProtectFromRegistry();
+		m_VERAFMEnabled[slot] = card.GetFMEnabledFromRegistry();
 		}
 		else if (m_Slot[slot] == CT_MockingboardC || m_Slot[slot] == CT_Phasor)
 		{
@@ -262,6 +264,7 @@ const CConfigNeedingRestart& CConfigNeedingRestart::operator= (const CConfigNeed
 			m_slotInfoForHDC[slot].pathname[i] = other.m_slotInfoForHDC[slot].pathname[i];
 		m_VERASDImagePath[slot] = other.m_VERASDImagePath[slot];
 		m_VERASDWriteProtect[slot] = other.m_VERASDWriteProtect[slot];
+		m_VERAFMEnabled[slot] = other.m_VERAFMEnabled[slot];
 	}
 
 	// Advanced

@@ -88,6 +88,7 @@ public:
 	HarddiskInterfaceCard m_harddiskCard;		// For image selection and validation
 	std::string m_VERASDImagePath[NUM_SLOTS];	// For VERA SD image selection and validation
 	bool m_VERASDWriteProtect[NUM_SLOTS];	// For VERA SD write-protect checkbox (persisted per-slot)
+	bool m_VERAFMEnabled[NUM_SLOTS];		// For VERA FM (YM2151) enable checkbox (persisted per-slot)
 
 	// Advanced
 	UINT m_uSaveLoadStateMsg;	// WM_USER_LOADSTATE or WM_USER_SAVESTATE

@@ -451,6 +451,9 @@ void CPageSlots::ApplyConfigAfterClose()
 		// Apply the write-protect checkbox (persisted to the registry) even if the
 		// image path didn't change.
 		card.SetSDWriteProtected(m_PropertySheetHelper.GetConfigNew().m_VERASDWriteProtect[slot]);
+
+		// Apply the FM enable checkbox (persisted to the registry).
+		card.SetFMEnabled(m_PropertySheetHelper.GetConfigNew().m_VERAFMEnabled[slot]);
 	}
 
 	// SSC
@@ -1555,6 +1558,13 @@ INT_PTR CPageSlots::DlgProcVERAInternal(HWND hWnd, UINT message, WPARAM wparam, 
 		}
 		break;
 
+		case IDC_SLOT_OPT_VERA_FM_ENABLE:
+		{
+			const bool fm = SendMessage(GetDlgItem(hWnd, IDC_SLOT_OPT_VERA_FM_ENABLE), BM_GETCHECK, 0, 0) == BST_CHECKED;
+			m_PropertySheetHelper.GetConfigNew().m_VERAFMEnabled[ms_slot] = fm;
+		}
+		break;
+
 		case IDOK:
 			EndDialog(hWnd, 0);
 			break;
@@ -1578,6 +1588,8 @@ INT_PTR CPageSlots::DlgProcVERAInternal(HWND hWnd, UINT message, WPARAM wparam, 
 		SetDlgItemText(hWnd, IDC_SLOT_OPT_VERA_SD_IMAGE, path.c_str());
 		const bool wp = m_PropertySheetHelper.GetConfigNew().m_VERASDWriteProtect[ms_slot];
 		CheckDlgButton(hWnd, IDC_SLOT_OPT_VERA_SD_WRITEPROTECT, wp ? BST_CHECKED : BST_UNCHECKED);
+		const bool fm = m_PropertySheetHelper.GetConfigNew().m_VERAFMEnabled[ms_slot];
+		CheckDlgButton(hWnd, IDC_SLOT_OPT_VERA_FM_ENABLE, fm ? BST_CHECKED : BST_UNCHECKED);
 	}
 	break;
 

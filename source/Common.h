@@ -137,6 +137,7 @@ enum AppMode_e
 #define REGVALUE_HDC_FIRMWARE "Firmware"
 #define REGVALUE_VERA_SD_IMAGE "SD Card Image"
 #define REGVALUE_VERA_SD_WRITEPROTECT "SD Card Write Protected"
+#define REGVALUE_VERA_FM_ENABLED "FM Card Enabled"
 
 // Preferences 
 #define REG_PREFS                              "Preferences"

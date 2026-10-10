@@ -31,7 +31,8 @@ Peripheral cards and add-on hardware supported:
 - 4Play and SNES MAX joystick cards
 - VidHD card (functionality limited to IIgs' Super Hi-Res video modes)
 - Commander X16 VERA card (slot 2 or 4): 640×480 VGA/NTSC graphics, 2 layers,
-  128 sprites, 256-colour palette, 16-channel PSG + PCM audio, SD card (SPI), IRQ
+  128 sprites, 256-colour palette, 16-channel PSG + PCM audio, optional YM2151
+  FM daughterboard, SD card (SPI), IRQ
 - No Slot Clock (NSC)
 - Game I/O Connector copy protection dongles 
 
@@ -42,6 +43,18 @@ The VERA expansion card (port of `apple2ts`'s TypeScript VERA) is installed in
 **slot 2 or 4** (`-s2 vera` / `-s4 vera`). It provides a 640×480 VGA/NTSC
 graphics core (2 layers, 128 sprites, 256-colour palette), a 16-channel PSG +
 PCM audio core, an SD card (SPI) storage interface, and an IRQ line.
+
+**FM daughterboard (YM2151 / OPM2151)** — the optional A2VERA FM board adds a
+Yamaha YM2151 FM chip addressed through the VERA Cx region:
+
+- `$Cs20` = `YM_REG` (register select), `$Cs21` = `YM_DATA` (data write /
+  status read) — mirroring the X16's `$9F40` / `$9F41`.
+- The chip is wrapped in `source/VERACard/VERAYM.h/.cpp` around the
+  `ymfm::ym2151` core (`source/ymfm/`, BSD-3-Clause). Native ~55,930 Hz output
+  is linearly resampled to 44.1 kHz and mixed into the VERA DS voice buffer.
+- Can be enabled/disabled per slot (`FM Card Enabled` in the VERA configuration
+  dialog, persisted per-slot in the registry). When disabled, `$Cs20`/`$Cs21`
+  fall through to the regular VERA register handling.
 
 Behaviour:
 

@@ -101,6 +101,12 @@ Files in `source\VERACard\`:
 - `VERAVideo.h/.cpp` — the video core: `Step()` (scanline advance),
   `render_line()`, layers, sprites, palette, FX registers, IRQ.
 - `VERAAudio.h/.cpp` — PSG (16 ch) + PCM FIFO mixer, `Render(buf, nSamples)`.
+- `VERAYM.h/.cpp` — YM2151 (OPM2151) FM daughterboard wrapper around the
+  `ymfm::ym2151` core (`source\ymfm\`, BSD-3-Clause). Host registers are
+  `$Cs20` = `YM_REG` (register select) and `$Cs21` = `YM_DATA` (data write,
+  read = status), mirroring the X16's `$9F40`/`$9F41`. Native ~55,930 Hz
+  output (`kYMClock` = 3,579,545 / 64) is resampled to 44.1 kHz by
+  `VERAYM::Render()` and mixed into the VERA DS voice in `UpdateSound()`.
 - `VERASD.h/.cpp` — SD/MMC SPI protocol emulation (port of apple2ts
   `src/worker/devices/vera/sdcard.ts`), speaking through VERA `$9F3E/$9F3F`.
   Uses real stdio for the backing raw 512-byte-block image.
@@ -110,12 +116,38 @@ Key integration points:
 - **IO region**: registers live in the Cx region `$Cs00–$CsFF` for the slot's
   bank; `addr & 0xff` selects the register. Registered via
   `RegisterIoHandler(slot, IO_Null, IO_Null, &IOReadCx, &IOWriteCx, ...)`.
+  The FM branch in `IOReadCx`/`IOWriteCx` intercepts `addr & 0xff` `$20`/`$21`
+  *before* the video-register path, and only when `m_bFMEnabled` (default on;
+  per-slot `REGVALUE_VERA_FM_ENABLED`, GUI checkbox in the VERA Configure
+  dialog).
 - **IRQ**: `eIRQSRC` has an `IS_VERA` value (`source\Common.h`); asserted via
   `CpuIrqAssert(IS_VERA)` / `CpuIrqDeassert(IS_VERA)`.
 - **CardManager**: single `m_pVERACard` instance, `GetVERACard()` accessor,
   and a slot drop-down entry (`CT_VERA` in `source\Card.h`).
 - **CmdLine**: `-s<slot> vera` selects the card; hard disk image args are
   `-h1/-h2` for slot 7 (`source\CmdLine.cpp`).
+
+### FM daughterboard (VERAYM)
+
+`VERAYM` implements the `ymfm_interface` hooks so the status register reflects
+the chip's BUSY window:
+
+- `ymfm_set_busy_end(clocks)` sets `m_busyEnd = m_clockCount + clocks`; ymfm
+  requests `32 * clock_prescale()` after each data write.
+- `ymfm_is_busy()` returns `m_clockCount < m_busyEnd`. **`m_clockCount` only
+  advances in `Generate()`** (+64 per native sample), which runs from
+  `VERAYM::Render()` inside `UpdateSound()`. A guest that polls `$Cs21` bit 7
+  therefore only sees BUSY clear while audio is being generated.
+- `VERAYM::Render(buf, numSamples)` resamples with linear interpolation
+  (`m_resamplePhase`, `m_prevL/R`, `m_curL/R`) at `ratio = sampleRate / 44100`.
+
+> **Known issue (unresolved)**: the io/register path is verified end-to-end
+> (an Apple II FM test writes the full init + key-on sequence through
+> `$Cs20`/`$Cs21`), but the ymfm core itself currently returns all-zero
+> output in this environment (`Generate()` yields `L = R = 0`), so no audio is
+> produced. The same core produces sound in `veramusic`'s native
+> `tools/zsmplay.exe`, which points at the wrapper/resampling integration
+> here rather than at the chip registers.
 
 ### SD card (VERA SPI SD)
 

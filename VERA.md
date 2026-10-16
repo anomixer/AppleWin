@@ -28,7 +28,7 @@ core is a C++ port of `apple2ts`'s TypeScript implementation
 ### Implementation status
 
 - Full VERA audio is done (16-channel PSG + PCM implemented).
-- The FM daughterboard (Yamaha YM2151 / OPM2151) is implemented and verified
+- The FM daughterboard (Yamaha YM2151) is implemented and verified
   end-to-end (2026-10-16) — see §5 "FM daughterboard".
 - The SD card SPI (SD/MMC) is implemented — see §4 "SD card SPI".
 
@@ -240,13 +240,17 @@ verification is covered in `test\VERATest\VERATest.cpp` (Test 7).
 - Control / rate / FIFO write via `$9F3B–$9F3D` (reg 0x1B–0x1D).
 - Supports 16-bit linear, stereo mixing.
 
-### FM daughterboard (YM2151 / OPM2151)
+### FM daughterboard (YM2151)
 
-- The optional A2VERA FM board adds a Yamaha YM2151 FM chip addressed through
-  the VERA Cx region: `$Cs20` = `YM_REG` (register select), `$Cs21` =
+- The A2VERA board (prototype hardware "EV1" release) adds a Yamaha YM2151
+  FM chip addressed through the VERA Cx region: `$Cs20` = `YM_REG` (register
+  select), `$Cs21` =
   `YM_DATA` (data write / status read), mirroring the X16's `$9F40`/`$9F41`.
 - Emulated by `source/VERACard/VERAYM.h/.cpp` wrapping the `ymfm::ym2151`
-  core (`source/ymfm/`, BSD-3-Clause). Native ~55,930 Hz output (chip clock
+  core (`source/ymfm/`, BSD-3-Clause): the socket ships with the
+  YM2151-compatible OPM2151 drop-in replacement and can also take a genuine
+  YM2151 — the emulated chip is the YM2151 either way. Native ~55,930 Hz
+  output (chip clock
   3,579,545 / 64) is linearly resampled to 44.1 kHz and mixed into the VERA
   DS voice buffer.
 - The status register reflects the chip's BUSY window (bit 7 set for ~32 chip

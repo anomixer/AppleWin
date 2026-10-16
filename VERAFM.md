@@ -1,4 +1,4 @@
-# A2VERA FM Audio (YM2151/OPM2151) Emulation — Implementation Record
+# A2VERA FM Audio (Yamaha YM2151) Emulation — Implementation Record
 
 > **Status: COMPLETE (2026-10-16).** The FM chain is implemented, verified
 > end-to-end and audible (full-scale ~440 Hz tone from the `veramusic`
@@ -8,7 +8,8 @@
 
 ## 1. Project Context & Goal
 * **Target Platforms**: AppleWin (C++) and apple2ts.com (TypeScript).
-* **Objective**: Add cycle-accurate support for the A2VERA FM Audio daughterboard (Yamaha YM2151 / OPM2151) running at ~1.023 MHz.
+* **Objective**: Add cycle-accurate support for the A2VERA FM Audio daughterboard (Yamaha YM2151) running at ~1.023 MHz.
+* **Hardware note**: the A2VERA board (prototype hardware "EV1" release) carries a Yamaha YM2151 (OPM interface) — the socket ships with the YM2151-compatible **OPM2151** drop-in replacement and can also take a genuine YM2151. The emulated chip is the YM2151 either way.
 
 ## 2. Hardware Architecture & Register Mapping
 * **Host Interface**: Installed in Slot 2 (`$C200`) or Slot 4 (`$C400`), exposing `YM_REG` (select register, `$Cs20`) and `YM_DATA` (data write / status read, `$Cs21`).

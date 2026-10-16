@@ -103,8 +103,8 @@ Files in `source\VERACard\`:
 - `VERAAudio.h/.cpp` — PSG (16 ch) + PCM FIFO mixer, `Render(buf, nSamples)`.
 - `VERAYM.h/.cpp` — FM daughterboard wrapper around the `ymfm::ym2151` core
   (`source\ymfm\`, BSD-3-Clause): emulates the **Yamaha YM2151** (the OPM
-  interface chip on the A2VERA board; shipped in the socket as the
-  YM2151-compatible OPM2151). Host registers are
+  interface chip on the A2VERA board; the socket can take a genuine YM2151
+  or the OPM2151 FPGA replacement). Host registers are
   `$Cs20` = `YM_REG` (register select) and `$Cs21` = `YM_DATA` (data write,
   read = status), mirroring the X16's `$9F40`/`$9F41`. Native ~55,930 Hz
   output (`kYMClock` = 3,579,545 / 64) is resampled to 44.1 kHz by

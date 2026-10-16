@@ -247,9 +247,9 @@ verification is covered in `test\VERATest\VERATest.cpp` (Test 7).
   select), `$Cs21` =
   `YM_DATA` (data write / status read), mirroring the X16's `$9F40`/`$9F41`.
 - Emulated by `source/VERACard/VERAYM.h/.cpp` wrapping the `ymfm::ym2151`
-  core (`source/ymfm/`, BSD-3-Clause): the socket ships with the
-  YM2151-compatible OPM2151 drop-in replacement and can also take a genuine
-  YM2151 — the emulated chip is the YM2151 either way. Native ~55,930 Hz
+  core (`source/ymfm/`, BSD-3-Clause): the socket can take a genuine YM2151
+  or the OPM2151 (a modern FPGA drop-in replacement for the vintage YM2151)
+  — the emulated chip is the YM2151 either way. Native ~55,930 Hz
   output (chip clock
   3,579,545 / 64) is linearly resampled to 44.1 kHz and mixed into the VERA
   DS voice buffer.

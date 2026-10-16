@@ -45,9 +45,10 @@ graphics core (2 layers, 128 sprites, 256-colour palette), a 16-channel PSG +
 PCM audio core, an SD card (SPI) storage interface, and an IRQ line.
 
 **FM daughterboard (YM2151)** — the A2VERA board (prototype hardware "EV1"
-release) adds a Yamaha YM2151 FM chip addressed through the VERA Cx region:
-the socket ships with the YM2151-compatible OPM2151 drop-in replacement and
-can also take a genuine YM2151 — the emulated chip is the YM2151 either way:
+release) adds a Yamaha YM2151 FM chip addressed through the VERA Cx region.
+The socket can take a genuine YM2151 or the OPM2151 (a modern FPGA
+drop-in replacement for the vintage YM2151) — the emulated chip is the
+YM2151 either way:
 
 - `$Cs20` = `YM_REG` (register select), `$Cs21` = `YM_DATA` (data write /
   status read) — mirroring the X16's `$9F40` / `$9F41`.

@@ -9,7 +9,7 @@
 ## 1. Project Context & Goal
 * **Target Platforms**: AppleWin (C++) and apple2ts.com (TypeScript).
 * **Objective**: Add cycle-accurate support for the A2VERA FM Audio daughterboard (Yamaha YM2151) running at ~1.023 MHz.
-* **Hardware note**: the A2VERA board (prototype hardware "EV1" release) carries a Yamaha YM2151 (OPM interface) — the socket ships with the YM2151-compatible **OPM2151** drop-in replacement and can also take a genuine YM2151. The emulated chip is the YM2151 either way.
+* **Hardware note**: the A2VERA board (prototype hardware "EV1" release) carries a Yamaha YM2151 (OPM interface) — the socket can take a genuine YM2151 or the **OPM2151**, a modern FPGA drop-in replacement for the vintage YM2151 (the original is no longer practical to source). The emulated chip is the YM2151 either way.
 
 ## 2. Hardware Architecture & Register Mapping
 * **Host Interface**: Installed in Slot 2 (`$C200`) or Slot 4 (`$C400`), exposing `YM_REG` (select register, `$Cs20`) and `YM_DATA` (data write / status read, `$Cs21`).

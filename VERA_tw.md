@@ -24,7 +24,7 @@ C++ 移植。
 ### 實作狀態
 
 - 完整 VERA 音效已完成（PSG 已實作 16 通道 + PCM）。
-- FM 女兒板（Yamaha YM2151，A2VERA 板出貨含 YM2151 相容的 OPM2151）已實作並完成端到端驗證（2026-10-16）— 見 §5「FM 女兒板」。
+- FM 女兒板（Yamaha YM2151；插座可裝真 YM2151 或 OPM2151 FPGA 替換件）已實作並完成端到端驗證（2026-10-16）— 見 §5「FM 女兒板」。
 - SD 卡 SPI（SD/MMC）已實作 — 見 §4「SD 卡 SPI」。
 
 ---
@@ -208,8 +208,8 @@ registry（每 slot 區段，`REGVALUE_VERA_SD_IMAGE` = "SD Card Image"）；`Un
   的 Cx 區域定址：`$Cs20` = `YM_REG`（暫存器選擇）、`$Cs21` = `YM_DATA`
   （資料寫入 / 狀態讀取），對應 X16 的 `$9F40`/`$9F41`。
 - 由 `source/VERACard/VERAYM.h/.cpp` 包裝 `ymfm::ym2151` 核心（
-  `source/ymfm/`，BSD-3-Clause）模擬：插座出貨時放的是 YM2151 相容的
-  OPM2151 替換晶片，也可以換上真正的 YM2151 —— 無論哪種，模擬的都是
+  `source/ymfm/`，BSD-3-Clause）模擬：插座可以裝真正的 YM2151，或改用
+  OPM2151（為老舊 YM2151 設計的現代 FPGA 替換件）—— 無論哪種，模擬的都是
   YM2151。原生 ~55,930 Hz 輸出（晶片時脈 3,579,545 / 64）經線性重取樣到
   44.1 kHz，混入 VERA 的 DS 音效 buffer。
 - 狀態暫存器會反映晶片的 BUSY 視窗（每次資料寫入後約 32 個晶片時脈 bit 7

@@ -5,9 +5,11 @@
 */
 #include "StdAfx.h"
 
-#include <algorithm>
+#include <cstdio>
+#include <string>
 
 #include "VERACard.h"
+#include "CmdLine.h"
 #include "Log.h"
 
 #include "Common.h"
@@ -491,6 +493,67 @@ void VERACard::UpdateSound()
 		if (mixed > 32767) mixed = 32767;
 		if (mixed < -32768) mixed = -32768;
 		m_mixBuffer[i] = static_cast<short>(mixed);
+	}
+
+	// FM-WAVDUMP: when -fm-wav-dump is given, dump the first ~20 s of the mixed
+	// VERA buffer to a WAV next to the exe, so the output can be played back
+	// through any normal audio player (audible even when DirectSound itself is
+	// silent on this machine). Opt-in only: don't clobber a previous capture.
+	static FILE* s_wavFile = nullptr;
+	static uint32_t s_wavSamples = 0;
+	static bool s_wavDone = false;
+	const uint32_t kWavCapSamples = 44100 * 20;
+	const bool bWavDump = g_cmdLine.fmWavDump;
+	if (bWavDump && !s_wavDone && s_wavSamples < kWavCapSamples)
+	{
+		if (!s_wavFile)
+		{
+			char szExePath[512];
+			GetModuleFileNameA(NULL, szExePath, sizeof(szExePath));
+			std::string szWav(szExePath);
+			const size_t pos = szWav.rfind('\\');
+			if (pos != std::string::npos)
+				szWav.erase(pos);
+			szWav += "\\VERA-fm.wav";
+			s_wavFile = fopen(szWav.c_str(), "wb");
+			if (s_wavFile)
+			{
+				// 44-byte placeholder header (stereo 16-bit @44100)
+				static const uint8_t hdr[44] = {
+					0x52,0x49,0x46,0x46, 0,0,0,0, 0x57,0x41,0x56,0x45, 0x66,0x6D,0x74,0x20,
+					16,0,0,0, 1,0, 2,0, 68,172,0,0, 0xA1,0x80,2,0, 4,0, 16,0, 'd','a','t','a', 0,0,0,0
+				};
+				fwrite(hdr, 1, sizeof(hdr), s_wavFile);
+			}
+			else
+			{
+				s_wavDone = true;
+			}
+		}
+		if (s_wavFile && !s_wavDone)
+		{
+			uint32_t n = (uint32_t)nNumSamples;
+			if (n > kWavCapSamples - s_wavSamples)
+				n = kWavCapSamples - s_wavSamples;
+			if (n > 0)
+			{
+				fseek(s_wavFile, 0, SEEK_END);
+				fwrite(m_mixBuffer.data(), 1, (size_t)n * sizeof(short) * kNumChannels, s_wavFile);
+				s_wavSamples += n;
+				// patch header sizes
+				const uint32_t dataSize = s_wavSamples * sizeof(short) * kNumChannels;
+				uint32_t riffSize = 36 + dataSize;
+				if (fseek(s_wavFile, 4, SEEK_SET) == 0) fwrite(&riffSize, 1, 4, s_wavFile);
+				if (fseek(s_wavFile, 40, SEEK_SET) == 0) fwrite(&dataSize, 1, 4, s_wavFile);
+				fseek(s_wavFile, 0, SEEK_END);
+				if (s_wavSamples >= kWavCapSamples)
+				{
+					fclose(s_wavFile);
+					s_wavFile = nullptr;
+					s_wavDone = true;
+				}
+			}
+		}
 	}
 
 	short* pLocked0;

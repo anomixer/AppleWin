@@ -188,3 +188,10 @@ FakesAssemblies/
 test_out.txt
 AppleWin1.32.0.0-vera.zip
 AppleWin1.32.0.0-vera/
+
+# VERA FM debug artifacts
+# (stale applewin/ repo copy was found and deleted 2026-10-16; if it ever
+# reappears, do not gitignore it — investigate instead)
+VERA-fm.wav
+VERA.log
+testtone.wav

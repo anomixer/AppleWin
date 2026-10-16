@@ -425,6 +425,10 @@ bool ProcessCmdLine(LPSTR lpCmdLine)
 			lpNextArg = GetNextArg(lpNextArg);
 			g_cmdLine.runCycles = strtoull(lpCmdLine, NULL, 10);
 		}
+		else if (strcmp(lpCmdLine, "-fm-wav-dump") == 0)	// For verification: dump first 20s of VERA mixed audio to VERA-fm.wav
+		{
+			g_cmdLine.fmWavDump = true;
+		}
 		else if (strcmp(lpCmdLine, "-f") == 0 || strcmp(lpCmdLine, "-full-screen") == 0)
 		{
 			g_cmdLine.setFullScreen = 1;

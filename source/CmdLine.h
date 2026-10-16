@@ -56,6 +56,7 @@ struct CmdLine
 		saveStateFilename = NULL;
 		veraDumpFilename = NULL;
 		runCycles = 0;
+		fmWavDump = false;
 		uHarddiskNumBlocks = 0;
 		uRamWorksExPages = 0;
 		uSaturnBanks = 0;
@@ -113,6 +114,7 @@ struct CmdLine
 	LPSTR saveStateFilename;	// -save-state <file>: save state at auto-exit
 	LPSTR veraDumpFilename;		// -vera-dump <file>: dump VERA VRAM at auto-exit
 	UINT64 runCycles;			// -run-cycles <N>: run N CPU cycles then auto-exit
+	bool fmWavDump;				// -fm-wav-dump: dump first 20s of VERA mixed audio to VERA-fm.wav next to the exe
 	UINT uRamWorksExPages;
 	UINT uSaturnBanks;
 	int newVideoType;

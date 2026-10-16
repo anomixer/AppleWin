@@ -141,13 +141,88 @@ the chip's BUSY window:
 - `VERAYM::Render(buf, numSamples)` resamples with linear interpolation
   (`m_resamplePhase`, `m_prevL/R`, `m_curL/R`) at `ratio = sampleRate / 44100`.
 
-> **Known issue (unresolved)**: the io/register path is verified end-to-end
-> (an Apple II FM test writes the full init + key-on sequence through
-> `$Cs20`/`$Cs21`), but the ymfm core itself currently returns all-zero
-> output in this environment (`Generate()` yields `L = R = 0`), so no audio is
-> produced. The same core produces sound in `veramusic`'s native
-> `tools/zsmplay.exe`, which points at the wrapper/resampling integration
-> here rather than at the chip registers.
+> **CONFIRMED WORKING (2026-10-16): the FM chain plays sound end-to-end.**
+> The user heard the tone with a real-time run of the `veramusic` `fmtest.po`
+> disk. The chain fmtest → `$Cs20/$Cs21` writes → ymfm core → DirectSound
+> voice is verified. The whole chain plays a full-scale (~440 Hz) FM tone.
+>
+> Verification evidence (headless + real-time runs):
+> - Real-time run (12 s, normal speed, no `-run-cycles`) of `-s2 vera -s6
+>   diskii -d1 C:\dev\veramusic\fmtest.po -power-on -log`: the log shows the
+>   complete 68-write guest sequence, `nativeNonzero=73234`, max L/R = 32640
+>   (near full scale), and the emulator's audio output contains a
+>   full-scale ~440 Hz FM tone (1.29–2.07 s of the dump).
+> - Headless auto-exit run (`-run-cycles N`) reproduces the same audio in
+>   the `-fm-wav-dump` capture — but **`N` must be ≥ ~8M cycles**: the guest
+>   key-on happens at ~6.2M CPU cycles, so `-run-cycles 6000000` exits
+>   before the beep and captures silence (all-zero dump).
+>
+> Historical debugging record (2026-10-16, `veramusic` fmtest.po):
+> - `fmtest.po` is a **ProDOS 2.4.3 disk** (280 x 512-byte blocks), built by
+>   `veramusic/tools/build_fmtest_po.mjs`. The player files
+>   (`FMTEST.BIN`/`FMTEST4.BIN`) are added as type BIN (0x06) with
+>   **aux = 0x2000** and raw program bytes (no DOS 3.3 4-byte addr/len header).
+>   `fmtest_startup.bas` runs them via ProDOS BASIC.SYSTEM's
+>   `PRINT CHR$(4);"BRUN FMTEST.BIN"`. The earlier "BRUN misreads the raw
+>   file as addr=$D878 / len=169" hypothesis is **eliminated**: the loaded code
+>   executes coherently at $2000 and its `$20D5` ADC table reads back
+>   `{0,8,16,24}` correctly.
+> - Guest write sequence (intended, from `fmtest.asm`): init
+>   `R8 D120, R8 D0, R32 D199` (`$C7`: ch0 CON=7), then per operator N=0..3
+>   six writes `($40+$8N, $01) ($60+$8N, $00) ($80+$8N, $1F) ($A0+$8N, $00)
+>   ($C0+$8N, $00) ($E0+$8N, $07)`, then play `R40 D74, R48 D0, R8 D120` ×2,
+>   keyoff `R8 D0`. The executing log matches this exactly (line for line).
+> - **Register anomaly — ROOT CAUSE FOUND + FIXED (guest bug, not emulator)**:
+>   pre-fix the five non-MUL register values came out either **immediate + 48**
+>   (`$90/$B0/$D0/$F0/$10`) or bare (`$60/$80/$A0/$C0/$E0`), randomly per
+>   write, and the table offset (+8N) vanished. Root cause is
+>   `fmtest.asm`'s `WAIT_BUSY` helper ($2112) — two bugs: (1) it clobbers X
+>   (`LDX #$10` with only A saved via PHA/PLA), and (2) its `BMI` is
+>   reversed: bit 7 **set** (BUSY) exits immediately, bit 7 clear spins 16×.
+>   So the TL write's `LDA #$60; CLC; ADC OP_OFF,X` inherits X from the
+>   previous `WAIT_BUSY` call: X=16 → the ADC reads `$20D5+16 = $20E5`,
+>   whose RAM value is `$30` (the immediate byte of PLAY_NOTE's `LDA #$30`)
+>   → reg = imm+$30 (+48, offset lost); X=0 → reads `$20D5+0 = $00` → reg =
+>   bare immediate. Fix (applied + verified): save/restore X around the poll
+>   and keep spinning **while bit 7 is set** (DEX timeout):
+>   `PHA / TXA / PHA / LDX #$10 / loop: LDA YM_DATA / BMI busy / exit;
+>   DEX / BNE loop / exit: PLA / TAX / PLA / RTS`.
+> - VERA.log **appends across runs** (several runs' lines coexist in one
+>   file, distinguished by `VERAYM(this=XXXX)` ids; a run's FM section
+>   restarts at `write YM_REG=8 (writes=1, ...)`) — always filter by the
+>   latest restart marker before concluding.
+> - Headless runs of this disk **require** both `-s6 diskii` (default slot 6
+>   has no Disk II → no boot) and `-log` (without it VERA.log grows zero
+>   lines): `-s2 vera -s6 diskii -d1 fmtest.po -power-on -log -run-cycles N`.
+> - Host environment: this machine exposes only VB-Audio Virtual Cable
+>   endpoints; DirectSound is silent there while waveOut works. Delivery plan
+>   chosen with the user: capture FM output to a WAV file to listen directly
+>   (`-fm-wav-dump`, see **Testing** below).
+
+### FM WAV dump (`-fm-wav-dump`)
+
+- `-fm-wav-dump` (new cmd-line flag, `CmdLine.h` `fmWavDump`) makes
+  `VERACard::UpdateSound()` dump the first **20 s** of the mixed VERA buffer
+  (PSG + PCM + FM sum, stereo 16-bit @ 44100) to `VERA-fm.wav` next to the
+  exe. Opt-in only: without the flag nothing is written, so a previous
+  capture is not clobbered.
+- The 44-byte WAV header placeholder is laid out so the two patched fields
+  (`RIFF` size at offset 4 and the `data`-chunk size at offset 40) align:
+  offsets 36–39 hold the literal `data` chunk id (`'d','a','t','a'`), offsets
+  40–43 hold the data-size placeholder. **Gotchas learned the hard way:**
+  the initial header version had offsets 36–39 zeroed — players can't find a
+  `data` chunk and refuse to play (the dump looked "silent" even though the
+  audio was real), and the average-byte-rate field (offset 28–31) was
+  written as `373504` (2× the true 176400). Both are fixed; a WAV whose
+  header is broken can still be repaired in place by patching those bytes.
+- `-run-cycles` interplay: the dump captures only audio produced before
+  auto-exit. For fmtest's two beeps use `-run-cycles 12000000` or larger.
+  Note the guest's `WAIT_2S` busy-wait loops are CPU-count driven, so under
+  headless auto-exit the beep timeline is compressed relative to real time
+  (beep at ~1.3 s in the capture instead of ~5 s); a real-time run shows the
+  natural timing.
+
+
 
 ### SD card (VERA SPI SD)
 
@@ -372,6 +447,18 @@ IIgs, only-VERA, and VERA+VidHD combinations.
   ```powershell
   & $exe -s2 vera -run-cycles 5000000 -vera-dump "dump.bin" -save-state "state.aws"
   ```
+- FM audio verification (headless): run the `veramusic` fmtest disk and capture the FM
+  output. `-fm-wav-dump` writes `VERA-fm.wav` (first 20 s of the mixed VERA buffer,
+  stereo 16-bit @ 44100) next to the exe; opt-in, without the flag nothing is written.
+  **`-run-cycles` must be ≥ ~8M** (fmtest key-on is at ~6.2M CPU cycles):
+  ```powershell
+  & $exe -s2 vera -s6 diskii -d1 C:\dev\veramusic\fmtest.po -power-on -log -run-cycles 12000000 -fm-wav-dump
+  ```
+  Validate the capture with Python (`import wave; wave.open(...)`): a playable
+  capture shows full-scale ±32704 peaks during the guest's beeps; all-zero means
+  either the cycles limit cut the run before key-on or the WAV header is broken
+  (see the FM WAV dump section above). For a real-time check, run the same command
+  line without `-run-cycles`, sleep ~12 s, then kill the process.
 
 ## Conventions
 

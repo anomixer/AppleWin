@@ -52,9 +52,14 @@ SD/MMC SPI 功能已實作並 commit（`VERASD.h/.cpp`、`VERAVideo.cpp`/`VERACa
 ## 3. 未完成 / 待辦（按優先序）
 
 1. **（已完成）push fork**（local master = squash commit）。✅
-2. **（可選）x16-rom / ProDOS 工具** — 舊 session 曾評估做一個 ProDOS 下可讀 VERA SD SPI 資訊的 6502 工具。相關 repo：`x16-rom`（X16Community）。
+2. **（已完成 2026-10-16）A2VERA FM 女兒板（YM2151）** — commit `23ba89a7`
+   （實作）+ `bbe567b0`（驗證 + `-fm-wav-dump`）。端到端已驗證：fmtest.po
+   即時與 headless 都輸出全幅 ~440 Hz FM 音。除錯記錄見 `AGENTS.md` 的
+   `### FM daughterboard (VERAYM)`、`### FM WAV dump`。
+3. **（可選）x16-rom / ProDOS 工具** — 舊 session 曾評估做一個 ProDOS 下可讀 VERA SD SPI 資訊的 6502 工具。相關 repo：`x16-rom`（X16Community）。
 
-> 已完成項目（VERACard diagnostic 移除、SD SPI 顯示/輸入修復、歷史 squash）均已完成。
+> 已完成項目（VERACard diagnostic 移除、SD SPI 顯示/輸入修復、歷史 squash、
+> FM 女兒板 + 驗證、臨時除錯碼全清）均已完成。
 
 ---
 
@@ -85,9 +90,10 @@ SD/MMC SPI 功能已實作並 commit（`VERASD.h/.cpp`、`VERAVideo.cpp`/`VERACa
 ## 6. 環境 / 工具
 
 - 工作目錄：`C:\dev\AppleWin`。
-- 相關目錄：`C:\dev\apple2ts`（apple2ts 原始碼）、`C:\dev\veratest`（asm6502.mjs / applebasic.mjs 組譯工具，上游來源）、`C:\dev\emu\ap2\prodos243.po`（外部 ProDOS 基底磁片，與 repo 內 `bin/ProDOS_2_4_3.po` 相同）。
+- 相關目錄：`C:\dev\apple2ts`（apple2ts 原始碼）、`C:\dev\veratest`（asm6502.mjs / applebasic.mjs 組譯工具，上游來源）、`C:\dev\veramusic`（FM 測試磁片 `fmtest.po` + melodius.exe 原生播放器 + 自家 AGENTS.md）、`C:\dev\emu\ap2\prodos243.po`（外部 ProDOS 基底磁片，與 repo 內 `bin/ProDOS_2_4_3.po` 相同）。
 - Release exe：`C:\dev\AppleWin\Release\AppleWin.exe`。
-- 測試磁片：`C:\dev\Time-Pilot\TimePilot-IIvera\TimePilot-IIvera.hdv`。
+- 測試磁片：`C:\dev\Time-Pilot\TimePilot-IIvera\TimePilot-IIvera.hdv`；FM 測試：`C:\dev\veramusic\fmtest.po`。
+- 舊 session 曾有一份 stale repo 副本坐在 `C:\dev\AppleWin\AppleWin\`（與專案 obj 中繼目錄同路徑，NTFS 大小寫不敏感）— 已於 2026-10-16 刪除；`AppleWin\Release\` 的 `.obj`/`.tlog` 是活的建置中繼產物，勿刪。
 
 ---
 

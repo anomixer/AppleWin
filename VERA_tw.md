@@ -24,6 +24,7 @@ C++ 移植。
 ### 實作狀態
 
 - 完整 VERA 音效已完成（PSG 已實作 16 通道 + PCM）。
+- FM 女兒板（Yamaha YM2151 / OPM2151）已實作並完成端到端驗證（2026-10-16）— 見 §5「FM 女兒板」。
 - SD 卡 SPI（SD/MMC）已實作 — 見 §4「SD 卡 SPI」。
 
 ---
@@ -200,6 +201,27 @@ registry（每 slot 區段，`REGVALUE_VERA_SD_IMAGE` = "SD Card Image"）；`Un
 - 4096 bytes FIFO，支援迴圈。
 - 控制 / 速率 / FIFO 寫入經由 `$9F3B–$9F3D`（reg 0x1B–0x1D）。
 - 支援 16-bit 線性、立體聲混音。
+
+### FM 女兒板（YM2151 / OPM2151）
+
+- 選配的 A2VERA FM 板增加一顆 Yamaha YM2151 FM 晶片，經由 VERA 的 Cx 區域
+  定址：`$Cs20` = `YM_REG`（暫存器選擇）、`$Cs21` = `YM_DATA`（資料寫入 /
+  狀態讀取），對應 X16 的 `$9F40`/`$9F41`。
+- 由 `source/VERACard/VERAYM.h/.cpp` 包裝 `ymfm::ym2151` 核心（
+  `source/ymfm/`，BSD-3-Clause）模擬。原生 ~55,930 Hz 輸出（晶片時脈
+  3,579,545 / 64）經線性重取樣到 44.1 kHz，混入 VERA 的 DS 音效 buffer。
+- 狀態暫存器會反映晶片的 BUSY 視窗（每次資料寫入後約 32 個晶片時脈 bit 7
+  為設置狀態）；客端程式必須**輪詢 `$Cs21` bit 7**。
+- 可逐插槽啟用／停用（VERA 設定對話框的 `FM Card Enabled`，持久化到該插槽
+  的 registry）。停用時 `$Cs20`/`$Cs21` 直通一般的 VERA 暫存器處理。
+- 已完成端到端驗證（2026-10-16）：客端程式寫入標準 init + key-on 序列後
+  模擬器輸出全幅 FM 音。自動化驗證：`-fm-wav-dump` 把混合 VERA buffer 的前
+  20 秒（PSG + PCM + FM 總和，立體聲 16-bit @ 44100）擷取到 exe 旁的
+  `VERA-fm.wav`；選項性，未給 flag 不寫任何東西。headless `-run-cycles`
+  需 ≥ 約 8M 週期（測試磁片的 key-on 在約 6.2M 週期）：
+  ```
+  AppleWin.exe -s2 vera -s6 diskii -d1 fmtest.po -power-on -log -run-cycles 12000000 -fm-wav-dump
+  ```
 
 ---
 

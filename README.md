@@ -55,6 +55,12 @@ Yamaha YM2151 FM chip addressed through the VERA Cx region:
 - Can be enabled/disabled per slot (`FM Card Enabled` in the VERA configuration
   dialog, persisted per-slot in the registry). When disabled, `$Cs20`/`$Cs21`
   fall through to the regular VERA register handling.
+- Verified end-to-end (2026-10-16): a guest program writing the standard
+  init + key-on sequence through `$Cs20`/`$Cs21` produces a full-scale FM
+  tone in the emulator's audio output. For automated verification,
+  `-fm-wav-dump` captures the first 20 s of the mixed VERA buffer (PSG +
+  PCM + FM sum, stereo 16-bit @ 44100) to `VERA-fm.wav` next to the exe —
+  opt-in; without the flag nothing is written.
 
 Behaviour:
 

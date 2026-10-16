@@ -28,6 +28,8 @@ core is a C++ port of `apple2ts`'s TypeScript implementation
 ### Implementation status
 
 - Full VERA audio is done (16-channel PSG + PCM implemented).
+- The FM daughterboard (Yamaha YM2151 / OPM2151) is implemented and verified
+  end-to-end (2026-10-16) — see §5 "FM daughterboard".
 - The SD card SPI (SD/MMC) is implemented — see §4 "SD card SPI".
 
 ---
@@ -237,6 +239,30 @@ verification is covered in `test\VERATest\VERATest.cpp` (Test 7).
 - 4096-byte FIFO, supports looping.
 - Control / rate / FIFO write via `$9F3B–$9F3D` (reg 0x1B–0x1D).
 - Supports 16-bit linear, stereo mixing.
+
+### FM daughterboard (YM2151 / OPM2151)
+
+- The optional A2VERA FM board adds a Yamaha YM2151 FM chip addressed through
+  the VERA Cx region: `$Cs20` = `YM_REG` (register select), `$Cs21` =
+  `YM_DATA` (data write / status read), mirroring the X16's `$9F40`/`$9F41`.
+- Emulated by `source/VERACard/VERAYM.h/.cpp` wrapping the `ymfm::ym2151`
+  core (`source/ymfm/`, BSD-3-Clause). Native ~55,930 Hz output (chip clock
+  3,579,545 / 64) is linearly resampled to 44.1 kHz and mixed into the VERA
+  DS voice buffer.
+- The status register reflects the chip's BUSY window (bit 7 set for ~32 chip
+  clocks after each data write); a guest program must **poll `$Cs21` bit 7**.
+- Enable/disable per slot (`FM Card Enabled` in the VERA configuration
+  dialog, persisted in the per-slot registry). When disabled, `$Cs20`/`$Cs21`
+  fall through to the regular VERA register handling.
+- Verified end-to-end (2026-10-16): a guest program writing the standard
+  init + key-on sequence produces a full-scale FM tone. Automated
+  verification: `-fm-wav-dump` captures the first 20 s of the mixed VERA
+  buffer (PSG + PCM + FM sum, stereo 16-bit @ 44100) to `VERA-fm.wav` next
+  to the exe; opt-in, nothing is written without the flag. With headless
+  `-run-cycles` use ≥ ~8M cycles (the test disk's key-on is at ~6.2M cycles):
+  ```
+  AppleWin.exe -s2 vera -s6 diskii -d1 fmtest.po -power-on -log -run-cycles 12000000 -fm-wav-dump
+  ```
 
 ---
 

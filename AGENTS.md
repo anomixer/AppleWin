@@ -461,6 +461,30 @@ IIgs, only-VERA, and VERA+VidHD combinations.
   either the cycles limit cut the run before key-on or the WAV header is broken
   (see the FM WAV dump section above). For a real-time check, run the same command
   line without `-run-cycles`, sleep ~12 s, then kill the process.
+- **Bash quoting gotcha (paths in `-ArgumentList`-style runs):** when launching
+  the exe from Git-Bash, double quotes eat `\d`/`\v`/`\z` escapes —
+  `-h1 "C:\dev\veramusic\z.hdv"` arrives as `C:devveramusicz.hdv`,
+  `DoHardDiskInsert` returns `res=0` and the GUI warns "Failed to insert
+  harddisk(s)". Use single quotes or forward slashes (`'C:/dev/...'`).
+  `AppleWin.log` (`Init: DoHardDiskInsert(HDD-0), res=…`) is the first thing to
+  check when a headless music run is silent: `res=0` means no HD mounted, no
+  ProDOS boot, the menu never appears — nothing else in the chain runs.
+- **pc-hook addresses drift with every player rebuild.** The `TMPFB`/`TMPEXIT`
+  pc probes in `VERACard.cpp` (`regs.pc == 0x…`) are byte offsets inside
+  `ZSMSTREAM*.BIN`; after reassembling the player they land on wrong
+  instructions and the dump silently never fires. Verify the hooked pc against
+  the current BIN before concluding "the hook found nothing": locate the
+  target instruction (e.g. `STA $C220` / the exit-path `STA DEBUG_MARKER`
+  stores) with a small script scanning `8d 20 c2` / `8d e1 33` in
+  `src/ZSMSTREAM*.BIN`. **AppleWin delivers IO-write pc as `STA`-address+3**
+  (pc already advanced past the 3-byte `STA abs`), so hook the pc AFTER the
+  store, not the store itself. Current mapping (2026-10-19): `TMPFB` at
+  `0x2C0A` (pc shown during `STA $C220` at `0x2C07`), exit-path at `0x2AAC`
+  (pc during `STA DEBUG_MARKER` at `0x2AA9` in DISK_FAIL), zp vars
+  `ERR=$33DE`, `ERRCODE=$33DF`, `DONE=$33E0`, `DEBUG_MARKER=$33E1`,
+  `IRQ_ACTIVE=$33EA`, `STREAM_END=$33EB`, `EOF_FLAG=$33EC`;
+  `SETMARK_PARAMS` at `$3459` (count) / `$345A` (ref) / `$345B..$345D` (24-bit
+  position) / `$345E` (REFNUM), `ERRSRC=$34A4`, stream zp `STREAM=$06/$07`.
 
 ## Conventions
 

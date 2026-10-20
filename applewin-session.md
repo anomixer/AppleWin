@@ -1,104 +1,129 @@
 # AppleWin VERA 專案 — Session 交接筆記
 
-> 這份文件是給新 session 接手用的完整脈絡。舊 session（AppleWin VERA，id `session-5102e95a-...`）因 context 塞爆 + 反覆 output token limit 卡住，故在此交接。工作目錄：`C:\dev\AppleWin`。
+> 這份文件是給新 session 接手用的完整脈絡。工作目錄：`C:\dev\applewin`。
+> 架構、build 流程、除錯記錄一律以 **`AGENTS.md`** 為權威來源，本筆記
+> 只補 git 狀態、進行中的工作與待辦。
 
 ---
 
 ## 0. 專案是什麼
 
-- **AppleWin** — Apple II 模擬器（Windows），加上了 **Commander X16 VERA** 擴充卡移植（`source\VERACard\`）。
-- 架構、build 流程、VERA 卡 / SD SPI / 顯示 / 音效等技術細節，一律以 **`AGENTS.md`** 為權威來源，本筆記不重複。
+- **AppleWin** — Apple II 模擬器（Windows），加上了 **Commander X16 VERA**
+  擴充卡移植（`source\VERACard\`），含 SD 卡 SPI、FM 女兒板（YM2151）。
 - 使用者主要用**繁體中文**溝通。
+- 相關 repo：`C:\dev\veramusic`（Apple II 音樂工具鏈，見 §4）。
 
 ---
 
-## 1. 目前 git 狀態（重要）
+## 1. 目前 git 狀態（2026-10-20 更新）
 
 ```
-fork/master = <squash commit>   (https://github.com/anomixer/AppleWin)   ← 已 push（hash 見 `git log`）
-local master = <squash commit>
-HEAD         = feat/vera (已合併上游 v1.32.1.0)
-工作樹：乾淨
+branch = feat/verafm，HEAD = 19234c37，工作樹乾淨
 ```
 
-> 歷史已 squash：`c1972253` 之後的全部 commit 已壓成**單一 squash commit**
-> （VERA SD hex sector viewer + editor + docs）。
+近期 commit（本 branch 頂端往下）：
 
-fork 歷史（最近）：
 ```
-<squash commit>  VERA SD hex sector viewer, editor + docs   （squash）
-c1972253  VERA: add SD/MMC SPI SD card emulation + GUI mount + docs
-91c283f1  Docs: rename VERA spec - VERA.md is now English, Chinese spec moved to VERA_tw.md
-7d9452c4  AGENTS: document building both Win32 (AppleWin.exe) and x64 (AppleWin-x64.exe) via the solution
-499edd94  Log: write VERA.log in Release only when -log given (Debug always writes)
-...
+19234c37  docs(verafm): record zsmstream player debugging lessons
+0b1a0ff5  docs(verafm): fix the chip/socket wording (YM2151 in the socket, OPM2151 as FPGA replacement)
+d694ffd7  docs(verafm): name the emulated chip Yamaha YM2151 (A2VERA EV1 hardware)
+4ccde5a5  docs(verafm): record FM verification across all docs
+ae61f14f  feat(verafm): verify FM audio end-to-end; add opt-in -fm-wav-dump capture
+23ba89a7  feat(verafm): A2VERA FM daughterboard (YM2151) via ymfm + VERAYM wrapper
+d4366ebc  docs: update docs for upstream v1.32.1.0 merge
+8cbc0d41  Merge upstream master into feat/vera   ← 已同步上游 v1.32.1.0
 ```
 
-> 先前 session 曾把 `master` 弄亂（停在舊音效版 `4918e7a7`）。已把本機 `master` 重新指向正確提交並 push 到 fork。若再遇 detached HEAD，用 `git branch -f master <commit>` 修。
+> 已完成並 commit 的里程碑：上游 v1.32.1.0 合併、SD 卡 SPI（歷史壓縮時期）、
+> FM 女兒板 + 端到端驗證、`-fm-wav-dump`、AGENTS.md 除錯教訓記錄。
 
-**Remote**：`origin` = 上游 `AppleWin/AppleWin`，`fork` = 使用者 fork `anomixer/AppleWin`（push 都到 fork）。
-
----
-
-## 2. 已完成的工作 — VERA SD 功能（commit `c1972253` 內）
-
-SD/MMC SPI 功能已實作並 commit（`VERASD.h/.cpp`、`VERAVideo.cpp`/`VERACard.cpp` 整合、GUI mount、registry 持久化、`VERA.md`/`VERA_tw.md` 更新）。**技術細節一律見 `AGENTS.md` 的 `### SD card (VERA SPI SD)`**，此處不重複。
-
-> 後續（commit `70f9f5aa`）修復了「一次選 VERA + SD image 後重啟」的路徑被清空：
-> SD 路徑改存 `CConfigNeedingRestart::m_VERASDImagePath`，由 `ApplyConfigAfterClose` 在卡片重新插入後掛載，並解決了首次 empty slot 選 VERA 直接點 `...` 的 `Bad dynamic_cast!` 崩潰。詳見 `AGENTS.md`。
+**Remote**：`origin` = 上游 `AppleWin/AppleWin`，`fork` = 使用者 fork
+`anomixer/AppleWin`（push 都到 fork）。
 
 ---
 
-## 3. 未完成 / 待辦（按優先序）
+## 2. 進行中的工作 — veramusic zsmstream 播放器 + TITLE 雜音（主線）
 
-1. **（已完成）push fork**（local master = squash commit）。✅
-2. **（已完成 2026-10-16）A2VERA FM 女兒板（YM2151）** — commit `23ba89a7`
-   （實作）+ `bbe567b0`（驗證 + `-fm-wav-dump`）。端到端已驗證：fmtest.po
-   即時與 headless 都輸出全幅 ~440 Hz FM 音。除錯記錄見 `AGENTS.md` 的
-   `### FM daughterboard (VERAYM)`、`### FM WAV dump`。
-3. **（可選）x16-rom / ProDOS 工具** — 舊 session 曾評估做一個 ProDOS 下可讀 VERA SD SPI 資訊的 6502 工具。相關 repo：`x16-rom`（X16Community）。
+`C:\dev\veramusic` 是 Apple II 音樂播放鏈（分支獨立、與 applewin repo 分開），
+最近三個 commit：
 
-> 已完成項目（VERACard diagnostic 移除、SD SPI 顯示/輸入修復、歷史 squash、
-> FM 女兒板 + 驗證、臨時除錯碼全清）均已完成。
+```
+f360b2e  feat(zsmstream): add direct-BRUN autostart for headless --autoplay runs
+889dc26  feat(zsmstream): in-song button controls + startup song-select menu
+2d9b9fc  feat(zsmstream): Apple //e ZSM stream player (PSG + YM2151 FM, 11-song menu)
+```
 
----
+即：Apple //e 的 ZSM 串流播放器（MLI 讀 ProDOS HDV、雙 frame buffer
+FB_A=$7300/FB_B=$7500、VSYNC IRQ 逐幀播），已含**按鈕控制與 STARTUP 選歌選單**。
 
-## 4. 舊 session 卡住的原因（給新 session 參考）
+**開著的 bug（主線）**：第 2 首 TITLE.ZSM 播放時 PSG 段雜音、歌變慢；FM 段
+聽起來像雜音/只有 PSG 出聲。使用者原話：「2 title 那首 歌慢，FM播放有一堆
+雜音... 後面psg部份又正常」「感覺只有psg而已，fm沒出來」。
 
-- Session「AppleWin VERA」跑了 ~100 回合、1500+ 步驟，context 塞到 ~75%（~197k/262k tokens），**反覆被 max output token 截斷**（turn 23、47、99 都是）。
-- 看起來「卡住」其實是**反覆截斷 → 使用者 continue / 抱怨 → 又被截斷**的循環，不是死當。
-- 主目標（SD SPI + GUI mount）已標記 complete。
-- **教訓**：這種長 session 不要繼續堆；新 session 直接接手目前狀態（本筆記 + AGENTS.md 已涵蓋）。
+已釘住的 root cause（headless `-run-cycles 60000000 -fm-wav-dump` capture，
+`Release\VERA.log` run 4 = `lines[231330:]` 起）：**TICK_PSG 的
+`(FB_ACT),Y` 在走原始 TITLE.ZSM stream buffer，不是 frame buffer** —
+66 字節連續對齊鐵證（`win[5:71]==stream[1:67]`）、每 walk cycle 恰 128 組、
+X≥8 寫出界落到 palette/sprite VRAM（144,599 筆 = 55%）⇒ 雜音機制；FM 側
+確認正常。**下一步**（照序）：(1) 驗證窗口首字節 TCNT1=0x80 假設；
+(2) 查 PUBLISH_FRAME/FRAME_START 的 FB_ACT 賦值；(3) 查 ProDOS MLI 是否
+踩 zp $16/$17（FB_ACT）或 $27/$28（WRB_BASE）；(4) 修 `zsmstream.asm`、
+重建磁片、headless 重驗。完整事實與卡點見 session 記憶檔：
+`~\.claude\projects\C--dev-applewin\memory\` 下的
+`HANDOFF-title-noise.md`、`zsmstream-title-psg-walk-noise.md`（其餘相關：
+`zsmstream-fm-16bit-decrement-fix.md`、`zsmstream-setmark-paramcount-fix.md`、
+`zsmstream-controls-and-startup-menu.md`）。
 
----
-
-## 5. 重要技術參考（簡錄）
-
-- **執行迴圈時序**（`AGENTS.md` 有詳述）：`ContinueExecution` 每 1ms batch 跑 `CpuExecute` + `GetCardMgr().Update`。VERA 幀用 `g_nCumulativeCycles` 幀邊界偵測，每 Apple 幀推完整一幀（16800 週期）。**勿**用 per-batch 數直接推 VERA 幀。
-- **Build**（務必經 solution，單執行緒）：
-  ```powershell
-  $msbuild = "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe"
-  & $msbuild "AppleWin-VS2022.sln" /p:Configuration=Release /p:Platform=Win32 /v:minimal /nologo
-  # x64: /p:Platform=x64
-  ```
-- **音效**：VERA 獨立卡，不借 Mockingboard/SSI263 模型；`UpdateSound()` 由 DS play cursor 驅動（分數樣本累加器），buffer ~3 幀。
-- **顯示**：雙螢幕設計——平常 Apple II，VERA 軟體啟用輸出才切 VERA。framebuffer 680×516，bottom-up。
-- **除錯**：崩潰是 SEH（0xC0000005），C++ try/catch 抓不到；用 `LogWriteVERALog()`（寫 exe 旁 `VERA.log`）。
-
----
-
-## 6. 環境 / 工具
-
-- 工作目錄：`C:\dev\AppleWin`。
-- 相關目錄：`C:\dev\apple2ts`（apple2ts 原始碼）、`C:\dev\veratest`（asm6502.mjs / applebasic.mjs 組譯工具，上游來源）、`C:\dev\veramusic`（FM 測試磁片 `fmtest.po` + melodius.exe 原生播放器 + 自家 AGENTS.md）、`C:\dev\emu\ap2\prodos243.po`（外部 ProDOS 基底磁片，與 repo 內 `bin/ProDOS_2_4_3.po` 相同）。
-- Release exe：`C:\dev\AppleWin\Release\AppleWin.exe`。
-- 測試磁片：`C:\dev\Time-Pilot\TimePilot-IIvera\TimePilot-IIvera.hdv`；FM 測試：`C:\dev\veramusic\fmtest.po`。
-- 舊 session 曾有一份 stale repo 副本坐在 `C:\dev\AppleWin\AppleWin\`（與專案 obj 中繼目錄同路徑，NTFS 大小寫不敏感）— 已於 2026-10-16 刪除；`AppleWin\Release\` 的 `.obj`/`.tlog` 是活的建置中繼產物，勿刪。
+> 已知 caveat：AGENTS.md 的 pc-hook 對映（TMPFB=0x2C0A 等）描述的是
+> **已部署的 debug build**（VERAZP 字串只存在於 Release\AppleWin.exe /
+> .pdb / VERACard.obj，不在任何 commit 的 source 裡）；這份 capture 用的
+> probe build 來源不在 git tree，位址會隨播放器重組譯漂移。
 
 ---
 
-## 7. 提醒新 session
+## 3. veramusic repo 未 commit 的狀態（需與使用者確認）
+
+- `src/ZSMSTREAMA.BIN`、`zsmstream_a.hdv`、`zsmstream_a.hdv.zip` 為
+  modified（autosong=1 直接放 TITLE 的 debug build）——待使用者決定
+  commit 或還原 autosong=0。
+- 未追蹤的除錯暫存檔：`tools/run4*.py`、`winalign.py`、
+  `titlebytes/frames/pan/pcm/psg/tick.py`、`scanff.py`、`patfind.py`、
+  `retest.py`、`dis6502.*`、`state_fmfix.aws`、`run4pickle.bin`、
+  `AppleWin.log`、零散 `33A7.` / `PRODOS#FF0000` / `_FileInformation.txt`
+  / `_extract/` 等。**使用者說要自己清 `tools/*.py`**，勿代刪、勿 commit。
+
+---
+
+## 4. 待辦（按優先序）
+
+1. **TITLE 雜音修復**（§2 的下一步 4 步）→ 修好用繁中回報，請使用者
+   實時測 TITLE + 其餘 10 首。
+2. （§3）與使用者確認 autosong=1 debug build 的去留。
+3. TITLE 修好後：更新 AGENTS.md 的 pc-hook 對映與除錯教訓。
+4. （可選）x16-rom / ProDOS 工具 — 舊 session 曾評估做一個 ProDOS 下可讀
+   VERA SD SPI 資訊的 6502 工具（repo：`x16-rom`，X16Community）。
+
+---
+
+## 5. 環境 / 工具
+
+- 工作目錄：`C:\dev\applewin`；Release exe：`C:\dev\applewin\Release\AppleWin.exe`。
+- 相關目錄：`C:\dev\apple2ts`（apple2ts 原始碼）、`C:\dev\veratest`
+  （asm6502.mjs / applebasic.mjs 組譯工具）、`C:\dev\veramusic`
+  （ZSM 播放器磁片 `zsmstream_a.hdv`、FM 測試 `fmtest.po`、自家
+  AGENTS.md）、`C:\dev\emu\ap2\prodos243.po`（外部 ProDOS 基底磁片）。
+- 測試磁片：`C:\dev\Time-Pilot\TimePilot-IIvera\TimePilot-IIvera.hdv`。
+- Build 務必經 solution、單執行緒（勿 `/m`）；LNK1104 先殺
+  `AppleWin.exe`。詳見 `AGENTS.md` 的 build 小節。
+
+---
+
+## 6. 提醒新 session
 
 - 使用者用**繁體中文**；回覆用繁中。
-- 若 push 到 fork 需要 credential helper（GCM），在 sandbox 下會失敗——需用 `danger-full-access`（本 session 目前已是 danger-full-access + approval 停用，可直接執行）。
-- 臨時/截圖檔（test_out.txt、Release zip）**已 gitignore，勿 commit**。
+- git commit 結尾 `Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>`；
+  PR 描述加 🤖 Generated with [Claude Code](https://claude.com/claude-code)。
+- 臨時/截圖檔（test_out.txt、Release zip）已 gitignore，勿 commit。
+- 臨時除錯碼用完移出 tree；`Release\VERA.log` 會跨 run append（多 run
+  並存，用最新 restart 標記過濾）。
+- 長 session：context 塞爆前先依使用者指示 compress（記憶檔 + 本筆記）。

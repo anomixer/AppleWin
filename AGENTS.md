@@ -485,6 +485,41 @@ IIgs, only-VERA, and VERA+VidHD combinations.
   `IRQ_ACTIVE=$33EA`, `STREAM_END=$33EB`, `EOF_FLAG=$33EC`;
   `SETMARK_PARAMS` at `$3459` (count) / `$345A` (ref) / `$345B..$345D` (24-bit
   position) / `$345E` (REFNUM), `ERRSRC=$34A4`, stream zp `STREAM=$06/$07`.
+  **Provenance caveat (2026-10-20): the `VERAZP`/`TMPFB` probe code lives
+  ONLY in the deployed debug-capture build** — the strings appear in
+  `Release\AppleWin.exe`, `Release\AppleWin.pdb`,
+  `AppleWin\Release\VERACard.obj` and the captured `Release\VERA.log`
+  (406 `VERAZP` lines, sample: `VERAZP ERR=$20 ERRCODE=$41 DONE=$50 …
+  STREAM=$419B`), but **not in any committed source** (`git log --all -S
+  VERAZP` is empty). The mapping above describes that deployed build, not
+  the current HEAD source; treat the addresses as stale until the TITLE
+  issue is resolved and the probe build is regenerated.
+- **zsmstream player status / TITLE.ZSM noise (open, 2026-10-20).** The
+  veramusic `zsmstream.asm` Apple //e player (`f360b2e` lineage in
+  `C:\dev\veramusic`) streams ZSM from a ProDOS HDV via MLI and publishes
+  decoded frames into a double frame buffer (FB_A=$7300 / FB_B=$7500).
+  Song #2 (TITLE.ZSM) plays with heavy noise on its PSG section (user:
+  「2 title 那首 歌慢， FM播放有一堆雜音... 後面psg部份又正常」); song-list
+  and other songs not yet tested. Diagnosis so far (headless
+  `-run-cycles 60000000 -fm-wav-dump` capture, run 4 of `Release\VERA.log`
+  from `lines[231330:]`, 1.50M lines): **TICK_PSG's `(FB_ACT),Y` reads walk
+  the raw TITLE.ZSM stream buffer, not the frame buffer** — the walk
+  window satisfies `win[5:71] == TITLE stream[1:67]` (66-byte contiguous
+  match), with a 4-byte head prefix `FF 00 00 00` and `win[4]=0x21` vs
+  `stream[0]=0x61` (only bit-6 differs); each walk cycle is exactly 128
+  groups (TCNT1=0x80/EOD hypothesis). The PSG loop's `STA $11F9C0+X`
+  writes land out-of-range for X≥8 into palette/sprite VRAM (144,599
+  writes = 55% of 261,708 PSG writes) — the audible noise mechanism; the
+  FM side is confirmed normal (TMPFM per-reg ratios match TITLE's YM
+  distribution, PCM FIFO writes = 0). Handoff state + next steps live in
+  the session memory file `zsmstream-title-psg-walk-noise` /
+  `HANDOFF-title-noise` under
+  `~\.claude\projects\C--dev-applewin\memory\`: (1) verify the
+  TCNT1=0x80 (128-iteration) head-byte hypothesis; (2) inspect
+  PUBLISH_FRAME / FRAME_START for an FB_ACT-gets-stream-pointer path;
+  (3) check ProDOS MLI for zero-page clobber of FB_ACT ($16/$17) or
+  WRB_BASE ($27/$28); (4) patch `zsmstream.asm`, rebuild the disk, and
+  re-verify headless.
 
 ## Conventions
 

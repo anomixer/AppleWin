@@ -6,6 +6,19 @@
 > Technical details and debugging history live in `AGENTS.md`
 > (`### FM daughterboard (VERAYM)` and `### FM WAV dump (-fm-wav-dump)`).
 
+> **Current status / follow-on work (2026-10-20).** The FM *card* side is
+> unchanged and complete; the follow-on work moved to the guest side —
+> `C:\dev\veramusic`'s Apple //e `zsmstream.asm` player
+> (PSG + YM2151, 11-song menu, button controls, STARTUP song select;
+> commits `2d9b9fc`/`889dc26`/`f360b2e`). Song #2 TITLE.ZSM shows a PSG
+> noise + slow-tempo fault under investigation (root cause pinned:
+> the player's TICK_PSG walks the raw TITLE.ZSM stream buffer instead of
+> the frame buffer — 66-byte alignment evidence; the FM path is confirmed
+> healthy in that capture). See `AGENTS.md` → Testing →
+> "zsmstream player status / TITLE.ZSM noise", and the session memory
+> files under `~\.claude\projects\C--dev-applewin\memory\`
+> (`HANDOFF-title-noise.md`, `zsmstream-title-psg-walk-noise.md`).
+
 ## 1. Project Context & Goal
 * **Target Platforms**: AppleWin (C++) and apple2ts.com (TypeScript).
 * **Objective**: Add cycle-accurate support for the A2VERA FM Audio daughterboard (Yamaha YM2151) running at ~1.023 MHz.

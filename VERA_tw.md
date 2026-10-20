@@ -26,6 +26,9 @@ C++ 移植。
 - 完整 VERA 音效已完成（PSG 已實作 16 通道 + PCM）。
 - FM 女兒板（Yamaha YM2151；插座可裝真 YM2151 或 OPM2151 FPGA 替換件）已實作並完成端到端驗證（2026-10-16）— 見 §5「FM 女兒板」。
 - SD 卡 SPI（SD/MMC）已實作 — 見 §4「SD 卡 SPI」。
+- 客端音樂播放（veramusic 的 Apple //e zsmstream 播放器）仍在驗證中 —
+  見 `AGENTS.md` → Testing 的「zsmstream player status / TITLE.ZSM
+  noise」條目。
 
 ---
 
@@ -224,6 +227,10 @@ registry（每 slot 區段，`REGVALUE_VERA_SD_IMAGE` = "SD Card Image"）；`Un
   ```
   AppleWin.exe -s2 vera -s6 diskii -d1 fmtest.po -power-on -log -run-cycles 12000000 -fm-wav-dump
   ```
+- 客端音樂播放用 `C:\dev\veramusic` 的 Apple //e ZSM 串流播放器
+  （`zsmstream.asm`，經女兒板輸出 PSG + FM）。其驗證狀態與開著的
+  TITLE.ZSM 問題記錄在 `AGENTS.md` → Testing →
+  "zsmstream player status / TITLE.ZSM noise"。
 
 ---
 

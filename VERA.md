@@ -31,6 +31,9 @@ core is a C++ port of `apple2ts`'s TypeScript implementation
 - The FM daughterboard (Yamaha YM2151) is implemented and verified
   end-to-end (2026-10-16) — see §5 "FM daughterboard".
 - The SD card SPI (SD/MMC) is implemented — see §4 "SD card SPI".
+- Guest music playback (veramusic's Apple //e zsmstream player) is under
+  verification — see the "zsmstream player status / TITLE.ZSM noise"
+  note in `AGENTS.md` → Testing.
 
 ---
 
@@ -267,6 +270,10 @@ verification is covered in `test\VERATest\VERATest.cpp` (Test 7).
   ```
   AppleWin.exe -s2 vera -s6 diskii -d1 fmtest.po -power-on -log -run-cycles 12000000 -fm-wav-dump
   ```
+- Guest-side music playback uses `C:\dev\veramusic`'s Apple //e ZSM
+  stream player (`zsmstream.asm`, PSG + FM via the daughterboard). Its
+  verification status and the open TITLE.ZSM fault are tracked in
+  `AGENTS.md` → Testing → "zsmstream player status / TITLE.ZSM noise".
 
 ---
 

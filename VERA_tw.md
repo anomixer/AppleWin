@@ -8,6 +8,8 @@ C++ 移植。
 > 與 VERA 相關的開發架構、建置與除錯記錄請見 `AGENTS.md`。
 > **註：** 本專案已與 AppleWin 上游 **master** 同步（v1.32.1.0 之後：spng
 > PNG 存檔、VS2026 專案、CONTRIBUTING AI 政策），2026-10-22 合併。
+>
+> **開發模式：** 本專案之 VERA / VERAFM 擴充卡功能由人工規劃整體架構、硬體規格與測試驗證，並由 AI 工具輔助程式碼實作，符合上游 [AI Tool Use Policy](CONTRIBUTING.md#ai-tool-use-policy) 之規範。
 
 ---
 

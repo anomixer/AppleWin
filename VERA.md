@@ -12,6 +12,10 @@ core is a C++ port of `apple2ts`'s TypeScript implementation
 > **Note:** This fork is synced with AppleWin upstream **master** (post
 > v1.32.1.0: PNG saved images via spng, VS2026 projects, CONTRIBUTING AI
 > policy), merged 2026-10-22.
+>
+> **Development Model:** The VERA and FM expansion card features in this fork
+> were architected, designed, and verified by human contributors, with implementation
+> assistance from AI tools in compliance with upstream's [AI Tool Use Policy](CONTRIBUTING.md#ai-tool-use-policy).
 
 ---
 

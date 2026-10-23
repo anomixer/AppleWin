@@ -39,6 +39,11 @@ Peripheral cards and add-on hardware supported:
 Commander X16 VERA card
 =======================
 
+> **Development Note:** The VERA and FM expansion card features in this fork
+> were architected, designed, and verified by human contributors, with
+> implementation assistance from AI coding tools in compliance with AppleWin's
+> [AI Tool Use Policy](CONTRIBUTING.md#ai-tool-use-policy).
+
 The VERA expansion card (port of `apple2ts`'s TypeScript VERA) is installed in
 **slot 2 or 4** (`-s2 vera` / `-s4 vera`). It provides a 640×480 VGA/NTSC
 graphics core (2 layers, 128 sprites, 256-colour palette), a 16-channel PSG +
@@ -95,9 +100,9 @@ Behaviour:
 Running
 =======
 
-Download latest (stable) release: [AppleWin v1.32.0.0](https://github.com/AppleWin/AppleWin/releases/download/v1.32.0.0/AppleWin1.32.0.0.zip)
+Download latest (stable) release: [AppleWin v1.32.1.0](https://github.com/AppleWin/AppleWin/releases/download/v1.32.1.0/AppleWin1.32.1.0.zip)
 
-Release Notes: [v1.32.0.0](https://github.com/AppleWin/AppleWin/releases/tag/v1.32.0.0)
+Release Notes: [v1.32.1.0](https://github.com/AppleWin/AppleWin/releases/tag/v1.32.1.0) | VERA Release: [v1.32.1.0-vera](https://github.com/anomixer/AppleWin/releases/tag/v1.32.1.0-vera)
 
 
 Building
@@ -126,7 +131,8 @@ These ports will allow you to build and run AppleWin on other platforms:
 
 Contributing
 ============
-Please see the [CONTRIBUTING](https://github.com/AppleWin/AppleWin/blob/master/CONTRIBUTING.md) document before raising new bugs, features and _especially_ PRs (Pull Requests).
+Please see the [CONTRIBUTING](CONTRIBUTING.md) document before raising new bugs, features and _especially_ PRs (Pull Requests).
+Note that upstream has established an **AI Tool Use Policy** (requiring human-in-the-loop, explicit marking of AI-generated contributions, and licensing compliance).
 
 
 Next Version

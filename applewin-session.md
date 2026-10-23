@@ -15,38 +15,25 @@
 
 ---
 
-## 1. 目前 git 狀態（2026-10-22 更新）
+## 1. 目前 git 狀態（2026-10-23 更新）
 
 ```
-branch = feat/verafm（repo 預設分支），HEAD 與 origin/feat/verafm 同步
+branch = feat/verafm（repo 預設分支），HEAD 與 fork/feat/verafm 完全同步
 工作樹：clean；feat/vera 已刪除（本地與 remote）
-分支清理完成：本地 backup/feat-verafm-pre-signature-clean 已刪，
-fork 上舊的 origin/master 已刪（內容已被 feat/verafm 完整包含）
+落後 upstream/master commits: 0
 ```
 
-2026-10-22 已把上游 **master**（`35366c56`，含 spng PNG 存檔、VS2026 專案、
-CONTRIBUTING AI 政策）合併進 `feat/verafm`（merge commit `e2a17136`）。
-衝突只有 `AppleWin-VS2022.vcxproj` 的 include path（上游 `spng` + 本專案
-`source\ymfm` / `source\VERACard`）；另補了 `spng` 專案 Win32 組態缺少的
-`..\zlib` include（上游只設了 x64，Win32 Release 會找不到 `zlib.h`）。
-合併後 Win32 Release 建置成功，headless TITLE 播放 8.1 s、peak 22586、
-無 clipping。
-
-`4e8f14ec` 的內容：
-
-```
-M AGENTS.md, README.md, VERA.md, VERA_tw.md, VERAFM.md, applewin-session.md
-M source/VERACard/VERACard.cpp     — VSYNC cpuMhz 換算 + (PSG+PCM)*2+YM 混音
-M source/VERACard/VERAVideo.cpp/.h — Step(double mhz, ...) 時序
-M source/VERACard/VERAYM.cpp/.h    — ZSM key-off clocking (ClockKeyOff)
-```
+2026-10-23 已透過正式 merge commit `60f23eaf` 將上游 **master**（`35366c56`，含 spng PNG 存檔、VS2026 專案、
+CONTRIBUTING AI 政策）完整記錄在 commit graph 中。解決了因先前 squash 導致落後 4 commits 的假象，
+程式碼內容 100% 相同且無 conflict。
+Win32 / x64 Release 建置均 0 error 通過。
 
 近期 commit（本 branch 頂端往下）：
 
 ```
-HEAD      docs(verafm): mark the session handoff as committed/pushed
-e2a17136  Merge upstream master into feat/verafm
-4e8f14ec  fix(verafm): YM retrigger clocking, X16 mixer balance, speed-aware VERA time
+60f23eaf  Merge branch 'master' of https://github.com/AppleWin/AppleWin into feat/verafm
+47a008ec  feat(verafm): YM retrigger, X16 mix balance, speed-aware VERA time + PCM docs
+1a7eac32  docs(verafm): record zsmstream TITLE-noise status; update session notes
 1f375f9c  docs(verafm): update TITLE-noise status ...; add melodius ground-truth workbench
 1a7eac32  docs(verafm): record zsmstream TITLE-noise status; update session notes
 58aea9c7  docs(verafm): record zsmstream player debugging lessons

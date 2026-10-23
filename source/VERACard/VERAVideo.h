@@ -27,7 +27,7 @@ public:
 
 	// Called each time the 6502 has executed some cycles (see VERACard::Update).
 	// Returns true when a new frame has completed.
-	bool Step(int mhz, int steps, bool midline);
+	bool Step(double mhz, int steps, bool midline);
 	void Update();
 
 	bool GetIRQOut();

@@ -6,18 +6,25 @@
 > Technical details and debugging history live in `AGENTS.md`
 > (`### FM daughterboard (VERAYM)` and `### FM WAV dump (-fm-wav-dump)`).
 
-> **Current status / follow-on work (2026-10-20).** The FM *card* side is
-> unchanged and complete; the follow-on work moved to the guest side —
-> `C:\dev\veramusic`'s Apple //e `zsmstream.asm` player
-> (PSG + YM2151, 11-song menu, button controls, STARTUP song select;
-> commits `2d9b9fc`/`889dc26`/`f360b2e`). Song #2 TITLE.ZSM shows a PSG
-> noise + slow-tempo fault under investigation (root cause pinned:
-> the player's TICK_PSG walks the raw TITLE.ZSM stream buffer instead of
-> the frame buffer — 66-byte alignment evidence; the FM path is confirmed
-> healthy in that capture). See `AGENTS.md` → Testing →
-> "zsmstream player status / TITLE.ZSM noise", and the session memory
-> files under `~\.claude\projects\C--dev-applewin\memory\`
-> (`HANDOFF-title-noise.md`, `zsmstream-title-psg-walk-noise.md`).
+> **Update 2026-10-22 — guest playback verified; retrigger + mix fixed.**
+> The guest-side TITLE.ZSM fault was two `zsmstream.asm` bugs, now fixed and
+> verified: a PSG-flood flag test (`STA` does not set flags) and the ProDOS
+> `SET_MARK` parameter count (2, not 4). TITLE.ZSM and BOTHPSG.ZSM play and
+> loop cleanly.
+>
+> Two FM-path refinements landed with it:
+> - **Retrigger** — `VERAYM::WriteData` clocks one native YM sample after a
+>   full key-off write to `$08` (`ClockKeyOff()`), so a ZSM key-off + key-on
+>   inside one tick starts a fresh attack. Verified against the x16emu
+>   ground-truth TITLE.ZSM render (all FM groups re-attack).
+> - **Mixer balance** — `VERACard::UpdateSound` now mixes
+>   `(PSG + PCM) * 2 + YM`, matching the X16 Developer Board. A 1:1 sum buried
+>   the PSG under the FM (「FM 很大聲, PSG 小貓叫」); the ×2 build was
+>   confirmed by ear.
+>
+> Technical details in `AGENTS.md` (`### FM daughterboard (VERAYM)`,
+> `### Audio model`, and Testing → "zsmstream player — TITLE.ZSM noise +
+> loop DISK ERR: RESOLVED").
 
 ## 1. Project Context & Goal
 * **Target Platforms**: AppleWin (C++) and apple2ts.com (TypeScript).
@@ -34,6 +41,6 @@
 
 ## 4. Implementation Checklist (all phases done)
 * **Phase 1 (Slot I/O)** — DONE: `$C2xx`/`$C4xx` handlers map to `ymfm::ym2151`; status reads reflect the BUSY window (`VERAYM::ymfm_set_busy_end` / `ymfm_is_busy`, driven by `m_clockCount` in `Generate()`). A guest must poll `$Cs21` bit 7.
-* **Phase 2 (Mixing)** — DONE: `Generate()` advances 64 clocks per native sample (~55,930 Hz); `VERAYM::Render()` linearly resamples to 44.1 kHz and mixes into the VERA DS voice buffer. Host-side FM switch (`FM Card Enabled`, per-slot registry) falls `$Cs20`/`$Cs21` through to regular VERA registers when off.
+* **Phase 2 (Mixing)** — DONE: `Generate()` advances 64 clocks per native sample (~55,930 Hz); `VERAYM::Render()` linearly resamples to 44.1 kHz and mixes into the VERA DS voice buffer. The final mix follows the X16 Developer Board: `(PSG + PCM) * 2 + YM`. Host-side FM switch (`FM Card Enabled`, per-slot registry) falls `$Cs20`/`$Cs21` through to regular VERA registers when off.
 * **Phase 3 (Portability)** — DONE for now: the C++ wrapper (`source/VERACard/VERAYM.h/.cpp`) is isolated around `source/ymfm/` (BSD-3-Clause) for a future Wasm/TS port.
-* **Verification (added)** — `fmtest.po` (ProDOS disk from `veramusic`) plays a full-scale FM tone; `-fm-wav-dump` captures the first 20 s of the mixed buffer to `VERA-fm.wav`; headless `-run-cycles` must be ≥ ~8M cycles (guest key-on at ~6.2M).
+* **Verification (added)** — `fmtest.po` (ProDOS disk from `veramusic`) plays a full-scale FM tone; `-fm-wav-dump` captures the first 20 s of the mixed buffer (PSG/PCM ×2 + FM) to `VERA-fm.wav`; headless `-run-cycles` must be ≥ ~8M cycles (guest key-on at ~6.2M). The Apple //e `zsmstream` player was verified with TITLE.ZSM and BOTHPSG.ZSM (PSG + FM, clean loops); its FM melody now matches the x16emu reference after the retrigger clocking fix.

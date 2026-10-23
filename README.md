@@ -55,14 +55,21 @@ YM2151 either way:
 - The chip is wrapped in `source/VERACard/VERAYM.h/.cpp` around the
   `ymfm::ym2151` core (`source/ymfm/`, BSD-3-Clause). Native ~55,930 Hz output
   is linearly resampled to 44.1 kHz and mixed into the VERA DS voice buffer.
+- **Mixer balance** — the X16 Developer Board mix is reproduced as
+  `(PSG + PCM) * 2 + YM` (a full-volume PSG voice is only 1/8 of full scale).
+  This is what keeps the PSG audible under the YM2151.
+- **ZSM retrigger** — a key-off write to `$08` clocks one native YM sample
+  before an immediately following key-on, so every note re-attacks instead of
+  only the first one.
 - Can be enabled/disabled per slot (`FM Card Enabled` in the VERA configuration
   dialog, persisted per-slot in the registry). When disabled, `$Cs20`/`$Cs21`
   fall through to the regular VERA register handling.
 - Verified end-to-end (2026-10-16): a guest program writing the standard
   init + key-on sequence through `$Cs20`/`$Cs21` produces a full-scale FM
-  tone in the emulator's audio output. For automated verification,
-  `-fm-wav-dump` captures the first 20 s of the mixed VERA buffer (PSG +
-  PCM + FM sum, stereo 16-bit @ 44100) to `VERA-fm.wav` next to the exe —
+  tone in the emulator's audio output. The veramusic Apple //e ZSM stream
+  player (TITLE.ZSM, BOTHPSG.ZSM) also plays through this chain with PSG + FM.
+  For automated verification, `-fm-wav-dump` captures the first 20 s of the
+  mixed VERA buffer (stereo 16-bit @ 44100) to `VERA-fm.wav` next to the exe —
   opt-in; without the flag nothing is written.
 
 Behaviour:
@@ -75,7 +82,8 @@ Behaviour:
   Mockingboard/SSI263 audio model). `UpdateSound()` is driven directly by the
   DS play cursor so the write rate exactly tracks real-time playback — no
   drift, no periodic glitch. The DS ring buffer is ~3 frames (~50 ms) with a
-  1/2-buffer lead.
+  1/2-buffer lead. PSG/PCM and FM are mixed with the X16 board balance,
+  `(PSG + PCM) * 2 + YM`.
 - **SD Card (SPI)** — emulates the SD/MMC SPI interface on `$Cs1E` (SD_DATA) and
   `$Cs1F` (SD_STATUS), supporting raw 512-byte block images (e.g. FAT32). Images
   can be mounted/unmounted via the `Configuration -> Slots -> VERA -> Configure...`

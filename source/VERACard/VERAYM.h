@@ -49,8 +49,14 @@ public:
 	bool ymfm_is_busy() override;
 
 private:
+	// Advance the chip by one native sample. A register burst that turns a
+	// channel off and back on (the ZSM key-off/key-on retrigger idiom) would
+	// otherwise never be seen by ymfm's sample-clocked keystate sampler.
+	void ClockKeyOff();
+
 	ymfm::ym2151 m_chip;
 	ymfm::ym2151::output_data m_output;
+	uint8_t m_regSelect;	// last value written to the address port
 	uint64_t m_clockCount;	// native-clock counter, advanced per generated sample
 	uint64_t m_busyEnd;	// native-clock count at which BUSY clears
 

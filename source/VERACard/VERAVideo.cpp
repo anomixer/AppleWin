@@ -792,7 +792,7 @@ void VERAVideo::update_isr_and_coll(int y, int compare)
 		m_isr |= 2;
 }
 
-bool VERAVideo::Step(int mhz, int steps, bool midline)
+bool VERAVideo::Step(double mhz, int steps, bool midline)
 {
 	int y = 0;
 	const bool ntsc_mode = (m_reg_composer[0] & 2) != 0;

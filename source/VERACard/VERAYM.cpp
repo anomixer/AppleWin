@@ -5,6 +5,7 @@
 
 VERAYM::VERAYM()
 	: m_chip(*this)
+	, m_regSelect(0)
 	, m_clockCount(0)
 	, m_busyEnd(0)
 	, m_resamplePhase(0)
@@ -21,6 +22,7 @@ VERAYM::~VERAYM()
 void VERAYM::Reset()
 {
 	m_chip.reset();
+	m_regSelect = 0;
 	m_clockCount = 0;
 	m_busyEnd = 0;
 	m_resamplePhase = 0;
@@ -29,12 +31,21 @@ void VERAYM::Reset()
 
 void VERAYM::WriteRegSelect(uint8_t value)
 {
+	m_regSelect = value;
 	m_chip.write(0, value); // address port
 }
 
 void VERAYM::WriteData(uint8_t value)
 {
 	m_chip.write(1, value); // data port — latches the selected register
+	// ZSM retriggers a channel with a key-off write immediately followed by
+	// a key-on write. The IRQ applies a whole tick's writes with no audio
+	// render in between, so ymfm would sample the key state as permanently
+	// "on" and only ever start the envelope once. Clocking one native sample
+	// after a full key-off lets the release latch, so the next key-on starts
+	// a fresh attack (this is what real hardware does with time passing).
+	if (m_regSelect == 0x08 && (value & 0x78) == 0)
+		ClockKeyOff();
 }
 
 uint8_t VERAYM::ReadData()
@@ -48,6 +59,13 @@ void VERAYM::Generate(int16_t* outL, int16_t* outR)
 	*outL = (int16_t)m_output.data[0];
 	*outR = (int16_t)m_output.data[1];
 	m_clockCount += 64;
+}
+
+void VERAYM::ClockKeyOff()
+{
+	m_prevL = m_curL;
+	m_prevR = m_curR;
+	Generate(&m_curL, &m_curR);
 }
 
 uint32_t VERAYM::GetSampleRate() const

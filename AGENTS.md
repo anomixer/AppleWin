@@ -14,7 +14,9 @@ provides a 640×480 VGA/NTSC graphics core, a 16-channel PSG + PCM audio core,
 and an IRQ line. The core is a C++ port of `apple2ts`'s TypeScript VERA
 (`src/worker/devices/vera/video.ts`, `pcm.ts`, `vera-psg.js`).
 
-> **Note:** This fork is synced with upstream AppleWin **v1.32.1.0**.
+> **Note:** This fork is synced with upstream AppleWin **master** (post
+> v1.32.1.0: PNG saved images via spng, VS2026 projects, CONTRIBUTING AI
+> policy). Merged 2026-10-22 into `feat/verafm`.
 
 ## Build workflow
 
@@ -76,14 +78,22 @@ The single most important thing to understand before touching `VERACard::Update`
 The correct video-timing approach (current implementation) advances VERA by the
 CPU cycles executed, **cycle-count driven**, mirroring apple2ts's
 `syncVera()`/`video_step(1, cycleDelta)`. `VERACard::Update` calls
-`SyncVideo()`, which advances `m_video.Step(1, delta)` by the `g_nCumulativeCycles`
-delta since the last sync (incremented by `CpuExecute`, see `source\CPU.cpp`),
-and `IOReadCx`/`IOWriteCx` call `SyncVideo()` **before every VERA register
-access** so the scanline register (`$08`) reflects the exact current cycle.
+`SyncVideo()`, which advances `m_video.Step(cpuMhz, delta)` by the
+`g_nCumulativeCycles` delta since the last sync (incremented by `CpuExecute`,
+see `source\CPU.cpp`), and `IOReadCx`/`IOWriteCx` call `SyncVideo()` **before
+every VERA register access** so the scanline register (`$08`) reflects the exact
+current cycle.
 `g_nCumulativeCycles` is only updated at CPU batch boundaries, so the IO
 handlers first call `CpuCalcCycles(nExecutedCycles)` to make it accurate at the
 exact read/write cycle — otherwise the port's scanline probe sees the batched
 value and the deltas come out uneven (`64/32` instead of `32/32`).
+
+**`cpuMhz` must be the real CPU clock, not a hard-coded 1.0:**
+`const double cpuMhz = g_fCurrentCLK6502 / 1000000.0;`. `VERAVideo::Step` uses
+it to convert CPU cycles into VERA pixel time. With a fixed 1 MHz on a 3 MHz
+//e configuration, VSYNC fired ~3× too fast (181 Hz instead of ~59.5 Hz) and
+the zsmstream IRQ ran away. Deriving it from `g_fCurrentCLK6502` keeps VERA at
+~59.5 Hz real time at any emulation speed.
 
 > Why not advance one full VERA frame per Apple frame? A once-per-frame advance
 > freezes the scanline inside a frame, and the SMB1 port's VERA-alive probe
@@ -142,6 +152,16 @@ the chip's BUSY window:
   therefore only sees BUSY clear while audio is being generated.
 - `VERAYM::Render(buf, numSamples)` resamples with linear interpolation
   (`m_resamplePhase`, `m_prevL/R`, `m_curL/R`) at `ratio = sampleRate / 44100`.
+- **Key-off must be clocked before an immediate key-on.** ymfm samples the key
+  state once per generated native sample (`clock_keystate` only starts an
+  attack on a 0→1 change of `m_key_state`). ZSM retriggers a channel with
+  `$08=ch` (key-off) immediately followed by `$08=$78|ch` (key-on) inside one
+  tick; with no sample in between, the two writes cancel and every note after
+  the first decays instead of re-attacking. `VERAYM::WriteData` therefore
+  tracks `m_regSelect` and calls `ClockKeyOff()` (one native sample) when
+  `$08` is written with `(val & 0x78) == 0`. Verified against the x16emu
+  TITLE.ZSM reference (all groups peak 0.13–0.26 instead of the 0.08 drum
+  floor).
 
 > **CONFIRMED WORKING (2026-10-16): the FM chain plays sound end-to-end.**
 > The user heard the tone with a real-time run of the `veramusic` `fmtest.po`
@@ -353,6 +373,14 @@ IIgs, only-VERA, and VERA+VidHD combinations.
   remainder), so the audio is synchronised to real-time playback — zero drift,
   zero periodic glitch. (Generating from `g_nCumulativeCycles` drifted ~0.4%
   from the DS clock and caused a glitch every ~14 s.)
+- **X16 Developer Board mix: `mixed = (PSG + PCM) * 2 + YM`.** `UpdateSound`
+  doubles the VERA bus (`m_mixBuffer`) before adding the YM2151
+  (`m_ymBuffer`), then clamps to int16. This mirrors x16emu `src/audio.c`
+  (`((psg + pcm) << 14) >> 13` + `ym >> 15`). A full-volume PSG voice is only
+  1/8 of full scale, so a 1:1 sum buries the PSG under the FM — the user
+  described it as 「FM 很大聲，PSG 小貓叫」. The ×2 belongs at the mixer
+  (`VERACard::UpdateSound`), not in `VERAAudio` (the PSG core itself is
+  register- and formula-accurate). Confirmed by listening on 2026-10-22.
 
 ## Debugging lessons (ordered)
 
@@ -367,16 +395,20 @@ IIgs, only-VERA, and VERA+VidHD combinations.
    `UpdateSound()`.
 5. **Way too slow / barely advancing** — using a running difference of the
    per-batch count made `cycleDelta ≈ 0`. Fixed by using the batch count
-   directly (later replaced entirely by the per-frame approach).
+   directly (later replaced by the cycle-count-driven approach).
 6. **16× too fast / scrolling** — forcing a full 16800-cycle frame **per batch**
    advanced ~16 frames per Apple frame; and per-batch advance caused drift.
-   Final fix: one full VERA frame per Apple display frame via
-   `g_nCumulativeCycles` frame-boundary detection.
+   Intermediate fix was one full VERA frame per Apple display frame via
+   `g_nCumulativeCycles` frame-boundary detection; that was later superseded
+   by the cycle-count-driven stepping described above (the per-frame approach
+   freezes the scanline and fails the SMB1 VERA-alive probe).
 7. **Choppy audio** — buffer was only 1 frame; raised to 3 frames.
 8. **Blue refresh interference / blanking** — only call `UpdateDisplay()` /
    `ClearFrameBuffer()` when `IsVideoOutputEnabled()`.
 9. **Text-mode blue scrolling up** — scan position drifted across frames;
-   solved by the per-frame full-scan approach.
+   solved by keeping the scan position live with cycle-count-driven stepping
+   (an intermediate per-frame full-scan approach also worked but froze the
+   scanline).
 10. **Apple II text offset up** — NTSC image anchored at top of a 480-tall
     borderless area; solved by the centring offset above.
 11. **Apple II image off-centre (bottom, left)** — vertical was shifted down by
@@ -491,35 +523,180 @@ IIgs, only-VERA, and VERA+VidHD combinations.
   `AppleWin\Release\VERACard.obj` and the captured `Release\VERA.log`
   (406 `VERAZP` lines, sample: `VERAZP ERR=$20 ERRCODE=$41 DONE=$50 …
   STREAM=$419B`), but **not in any committed source** (`git log --all -S
-  VERAZP` is empty). The mapping above describes that deployed build, not
-  the current HEAD source; treat the addresses as stale until the TITLE
-  issue is resolved and the probe build is regenerated.
-- **zsmstream player status / TITLE.ZSM noise (open, 2026-10-20).** The
-  veramusic `zsmstream.asm` Apple //e player (`f360b2e` lineage in
-  `C:\dev\veramusic`) streams ZSM from a ProDOS HDV via MLI and publishes
-  decoded frames into a double frame buffer (FB_A=$7300 / FB_B=$7500).
-  Song #2 (TITLE.ZSM) plays with heavy noise on its PSG section (user:
-  「2 title 那首 歌慢， FM播放有一堆雜音... 後面psg部份又正常」); song-list
-  and other songs not yet tested. Diagnosis so far (headless
-  `-run-cycles 60000000 -fm-wav-dump` capture, run 4 of `Release\VERA.log`
-  from `lines[231330:]`, 1.50M lines): **TICK_PSG's `(FB_ACT),Y` reads walk
-  the raw TITLE.ZSM stream buffer, not the frame buffer** — the walk
-  window satisfies `win[5:71] == TITLE stream[1:67]` (66-byte contiguous
-  match), with a 4-byte head prefix `FF 00 00 00` and `win[4]=0x21` vs
-  `stream[0]=0x61` (only bit-6 differs); each walk cycle is exactly 128
-  groups (TCNT1=0x80/EOD hypothesis). The PSG loop's `STA $11F9C0+X`
-  writes land out-of-range for X≥8 into palette/sprite VRAM (144,599
-  writes = 55% of 261,708 PSG writes) — the audible noise mechanism; the
-  FM side is confirmed normal (TMPFM per-reg ratios match TITLE's YM
-  distribution, PCM FIFO writes = 0). Handoff state + next steps live in
-  the session memory file `zsmstream-title-psg-walk-noise` /
-  `HANDOFF-title-noise` under
-  `~\.claude\projects\C--dev-applewin\memory\`: (1) verify the
-  TCNT1=0x80 (128-iteration) head-byte hypothesis; (2) inspect
-  PUBLISH_FRAME / FRAME_START for an FB_ACT-gets-stream-pointer path;
-  (3) check ProDOS MLI for zero-page clobber of FB_ACT ($16/$17) or
-  WRB_BASE ($27/$28); (4) patch `zsmstream.asm`, rebuild the disk, and
-  re-verify headless.
+  VERAZP` is empty). The mapping above describes that deployed build.
+  **Update 2026-10-22:** the TITLE issue is resolved, the probes were removed
+  from `VERACard.cpp`, and the current autoplay build (`ZSMSTREAMA.BIN`,
+  end $37D9) uses: `ERR=$370C`, `ERRCODE=$370D`, `DONE_FLAG=$370E`,
+  `DEBUG_MARKER=$370F`, `IRQ_ACTIVE=$3718`, `STREAM_END=$3719`,
+  `EOF_FLAG=$371A`, `TCNT1=$371C`, `SETMARK_PARAMS=$3787` (count 2, ref,
+  24-bit position), `REF_NUM=$378C`, `ERRSRC=$37D2`; stream zp `STREAM=$06/$07`.
+- **zsmstream player — TITLE.ZSM noise + loop DISK ERR: RESOLVED (2026-10-22).**
+  The veramusic `zsmstream.asm` Apple //e player (`C:\dev\veramusic`) streams
+  ZSM from a ProDOS HDV via MLI and publishes decoded frames into a double
+  frame buffer (FB_A=$7300 / FB_B=$7500). Two independent player bugs caused
+  the reported symptoms (slow motion + heavy noise, and intermittent
+  「disk err - stream block xxx」); both are fixed and verified headless against
+  the X16 `melodius` ground truth:
+  1. **PSG flood → slow motion + noise.** `TICK4` did `STA TCNT1` then
+     `BEQ TICK_YM`; `STA` does not set flags, so the stale Z from
+     `CMP #$FF` was tested. A frame with psgCnt=0 fell through, `DEC TCNT1`
+     underflowed to $FF and the IRQ wrote 256 bogus PSG pairs (addresses ran
+     past the PSG window into palette/sprite VRAM). Fix: `CMP #$00` before
+     the branch. The PSG walk is also 16-bit now (a frame can exceed 255 B):
+     `FB_RD_L/H = FB_ACT`, `LDA (FB_RD_L),Y`. The earlier "TICK_PSG walks the
+     raw stream buffer" diagnosis was this flood's symptom, not a separate
+     bug.
+  2. **EOD loop-seek DISK ERR $04.** `SETMARK_PARAMS` was `!byte 4,...`;
+     ProDOS MLI SET_MARK takes a parameter count of **2** (refnum + 24-bit
+     position). With 4 the MLI returns $04 (bad reference number) at the
+     first EOD, `DISK_FAIL` prints "DISK ERR - STREAM BLOCK UNREADABLE $04"
+     and closes the stream. Fix: `!byte 2,...` (matches `pcmstream.asm`).
+  3. **FM melody: first chord plays, every later note is silent/decaying
+     (YM2151 retrigger lost).** ZSM retriggers a channel with `$08=ch`
+     (key-off, operator mask 0) immediately followed by `$08=$78|ch`
+     (key-on) inside one tick. ymfm samples the key state once per generated
+     sample (`clock_keystate` only calls `start_attack()` on a 0→1 change of
+     `m_key_state`), and the players applied a whole tick's writes with no
+     sample generated in between, so key-off+key-on cancelled: the envelope
+     kept decaying and each new note started quieter (or not at all). The
+     first note of each channel works because it starts from key state 0.
+     Fix: after a full key-off write to `$08`, clock exactly one native YM
+     sample so the release latches before the key-on arrives —
+     `melodius.cpp` (`ym_clock_keyoff()` in `apply_frame`) and AppleWin
+     `VERAYM::WriteData` (`m_regSelect == 0x08 && (val & 0x78) == 0` →
+     `ClockKeyOff()`), both tracking the selected register.
+     Verified: `tools/melodius.exe TITLE.ZSM --wav` vs the x16emu truth
+     (aligned, 55 s): 0 loud-windows missing (was ~74% unaligned / audible
+     collapse); `ch0` solo envelope per note 0.074→0.078→0.087 (was
+     0.074→0.020→0.005). AppleWin `-fm-wav-dump` group peaks now
+     0.13–0.26 for all groups (old dump stayed at the drum floor 0.08).
+     x16emu uses the same ymfm but clocks the chip between CPU writes, which
+     is why the X16 reference never had the bug.
+  Verification (Enhanced //e at 3 MHz — see the timing note below):
+  - TITLE: first pass plays normally (6052 real PSG pairs after tick 1024; 897
+    host ADDR_L writes observed for ticks 1024–1433 vs 900 expected), then
+    loops at ~171M cycles. State at 195M: FRM=3765, DEBUG_MARKER=$12, ERR=0,
+    ERRCODE=0, REF_NUM=1, EOF_FLAG=0; the 512-byte stream buffer matches
+    TITLE byte offset 0x2688 (loop point 0x888 + 15 blocks) with STREAM
+    pointing at 0x27D8.
+  - BOTHPSG: loops 3.28× to offset 0x13 (a valid command boundary
+    mid-frame), PSG writes continue to the end, buffer matches offset 0x13.
+  - The menu disk (`zsmstream.hdv`) boots and shows the song list; the
+    autoplay disk (`zsmstream_a.hdv`, AUTOSONG=1) is the TITLE test disk.
+  - **Follow-up 2026-10-22 (PCM):** the player now decodes the ZSM `$40` EXTCMD
+    PCM sub-events and streams samples through the VERA FIFO, so the emulator's
+    PCM path finally gets traffic. `VERAAudio::renderPcmSample` was verified
+    against the x16-validated reference renderer and needed **no change**: the
+    FIFO byte rate is `rate * 48828.125/128` (≈ `rate * 381.5` Hz), format
+    `ctrl>>4 & 3` = mono8 / stereo8 / mono16 / stereo16 with **signed** 8-bit
+    (`(int8)b << 8`), and `s_pcmVolumeLut[ctrl & 0x0f] / 64` gain — all identical
+    to `veramusic/tools/melodius.cpp`. The verification signal is the count and
+    distribution of `$C21D` writes in `VERA.log`: Crockett streams 357k FIFO
+    bytes in 20 s (~17.8 kB/s, matching rate 64) with a signed-audio histogram
+    (mean ≈ 0, peaks at `$00`/`$FF`), TREE 508k bytes. Silence there means the
+    player never triggered, not that the emulator dropped it.
+  - The veramusic disks were consolidated into one jukebox image: `zsmstream.hdv`
+    / `zsmstream_a.hdv` are gone, replaced by `C:\dev\veramusic\melodius.hdv`
+    (94 songs, two-level menu) and the temp autoplay image
+    `%TEMP%\melodius_autoplay.hdv` built by
+    `node tools/build_melodius.mjs --autoplay <songIdx>` (`--list` prints the
+    indices). PCM samples live in companion `<name>.PCM` files on the same
+    volume because ProDOS 8 refuses a second OPEN on an open file ($50).
+  - The temporary TICK/PSG/IRQ probes and the `pc=` field in the generic IO
+    log were removed from `VERACard.cpp`; only the real-time VSYNC fix
+    remains. All `zsmstream*.hdv` images were rebuilt from the fixed source.
+  - **PCM streaming is a CPU-budget problem, not an emulator bug (2026-10-22,
+    TREE.ZSM).** TREE is one 1.47 MB mono-8 instrument at rate 73, i.e. the
+    VERA FIFO must be fed 27,865 B/s. Each FIFO byte costs the guest
+    `LDA ctrl / BMI / LDA (ptr),Y / STA $C21D / INY / CPY / BNE` ≈ 22 cycles,
+    so the feed alone needs ~613 k cycles/s = 60 % of a 1.02 MHz //e, and with
+    the tick decode + MLI window fills + status drawing on top the player only
+    manages ~26 kB/s — the FIFO sits at 0-400 bytes and every missing byte
+    becomes one silent sample, which is what "all noise" sounded like. At the
+    user's 3 MHz setting the same code feeds 27,843 B/s with the FIFO pinned at
+    3817 and zero underruns. Diagnose it with a temporary counter probe
+    (`pushed` / `popped` / `underrun` / `fifo` / `rate` / `clk` logged once per
+    44100 generated samples in `UpdateSound`): `fifo` hovering near 0 with
+    `pushed < rate*381.47` is feed starvation; `fifo` full means the emulator
+    is at fault. **`-clock-multiplier <n>` (CmdLine.cpp) is how to force the
+    clock headlessly** — a plain headless run uses the registry speed, which on
+    this machine measured 1,020,484 Hz, not the interactive 3 MHz.
+  - **Measurement gotcha: `-log` throttles the emulation.** `IOWriteCx` logs
+    every non-DATA0 write, and each line is an `fopen`/`fwrite`/`fclose`; at
+    27.9 k FIFO bytes/s that is 27,900 log opens per second, which pushes the
+    run below real time and makes a *feed-rate* measurement taken under `-log`
+    meaningless. The bulk stream ports are now excluded from that log
+    (`(addr & 0x1f) != 0x03` for DATA0, `!= 0x1d` for the PCM FIFO data port).
+    `Log.cpp` only writes VERA.log when `-log` is set, so interactive runs were
+    never affected.
+  - Reference for the alignment test: `tools/melodius.exe TREE.ZSM --no-loop
+    --time 20 --wav tree_truth.wav` (48 kHz, 53.4 s). Compare by cross-
+    correlating 20 ms RMS envelopes over 2 s segments: a correct stream tracks
+    `emu = truth + const` with corr > 0.95 per segment; a slope ≠ 1 means the
+    feed is starving (silence stretches the timeline) and a *linear* slope is
+    the emulator's clock, not the player.
+  - **Crockett noise resolved (2026-10-23) — the bug was in the veramusic build
+    tool, not the emulator.** `zsm_pcm_resample.mjs` walked 16-bit PCM with a
+    1-byte frame (`bytesPerFrame` ignored the sample width), so the decimated
+    mono16 drum became byte hash; and the songs still ran drums at up to
+    97.7 kB/s, which starves the FIFO at 1.02 MHz. The build now caps every
+    PCM song at **8,011 B/s mono / 16,022 B/s stereo** — the jukebox's 8 kHz
+    VERA rate 21, with 16-bit instruments re-quantized to dithered 8-bit
+    (`PCM01.PCM` 423 KB, `MOO03.PCM` 6.8 KB). Verified in AppleWin at the
+    earlier 16 kB/s cap: TREE `pushed 16022 / popped 16022 / underrun 0`,
+    envelope corr 0.9948; Crockett's mono16 drum single-hit corr 0.999 (peak
+    8,020 vs 8,032). The 8 kHz build is verified two ways: offline, source vs
+    8 kHz Crockett (both renders with the companion `.PCM` joined, 144 s) gives
+    20 ms envelope corr 0.9999 and RMS −0.04 dB, with the 16→8-bit step alone
+    at SNR 29.0 dB; in-emulator, a headless 1.02 MHz Crockett run logs `$C21C`
+    alternating `$15` (rate 21) / `$00` and its dump has no zero sample runs
+    after the boot silence. `VERAAudio::renderPcmSample` needed no change.
+  - **Non-60 Hz ZSM tick rates now normalized in the player (2026-10-23).**
+    Headbanger!.zsm (header tick rate **240**) played ~4× slow because the IRQ
+    published one tick per 60 Hz VSYNC. `zsmstream.asm` now does what zsmkit
+    does: `DECODE_FRAME` consumes `TICKS_PER_FRM = rate/60` ticks plus a
+    `TICK_REM = rate%60` carry (merged into one frame), and rates <60 publish
+    hold frames. `FRM` counts source ticks, so the 5 s seek uses
+    `5 * TICKRATE`. The menu duration label and `tools/melodius.exe` were also
+    dividing ticks by 60 (Headbanger showed 17:34); both now divide by the
+    header rate (4:24, offline WAV 263.6 s and byte-identical to the old
+    render's first 263.6 s). Verified at 3 MHz (reference's 12 s section lands
+    at ~13 s) and at the default 1.02 MHz (continuous RMS, no dropouts), with
+    60/64/50 Hz songs regression-tested — the merged 240 Hz frames cost no more
+    per output frame than a 60 Hz song.
+  **Timing note:** this machine's //e runs at 3 MHz (config speed slider), so
+  `g_nCumulativeCycles` advances ~51k per 60 Hz VERA tick, not ~17k: TITLE's
+  EOD is at ~171M cycles and a 75M-cycle run is only ~24 s of song time.
+  `T:` on screen is published-frame based, so 55 s of music = ~3329 frames.
+  The VSYNC fix (`Step(double mhz,...)` with `g_fCurrentCLK6502/1e6`) keeps
+  VERA at ~59.5 Hz real time at any emulation speed; it is a real fix, not a
+  probe.
+- **melodius (X16 player) ground-truth workbench (2026-10-22).** To obtain
+  a reference recording for the above comparison, the X16-native player
+  `C:\dev\melodius` was instrumented in x16emu:
+  - Built with `ca65 --cpu W65C02` (uppercase W; lowercase `65C02` rejects
+    `wai`), linked via `ld65 -C melodius.cfg obj/*.o -m melodius.map -o
+    melodius.PRG`.
+  - TEMP short-circuit `loadtitle` added to `src\directory.s`: walks the
+    DIR-bank `mfiles` list comparing each null-terminated entry against
+    `"TITLE.ZSM"`, sets `cactive`/`cvis` to the hit and calls
+    `dirlist_exec_dptr` — replaces the old `jsr loadrandom` in
+    `main.s` (entry at `melodius.map` 000B9B).
+  - x16emu keyboard injection capability (final): only down/tab reach the
+    kernal; enter/space/letters silently do nothing (proven with a hex
+    key-value probe at col 74 of melodius + the BASIC echo file).
+    `pyautogui`+SetForegroundWindow is fine for screenshots, not keys.
+  - **Ground truth captured**: `x16emu -prg melodius.PRG -run -fsroot .
+    -ram 1024 -scale 1 -echo iso -wav title_truth.wav,auto` records the
+    emulator's audio output (`-wav file[,auto]` starts on first non-zero
+    audio). Killing x16emu truncates the WAV header; repair in place by
+    patching RIFF size at offset 4 and data-chunk size at offset 40 (fmt
+    chunk lives at 16, data starts at 44). Result:
+    `C:\dev\melodius\x16run\title_truth_fixed.wav` = 209 s stereo 48828 Hz,
+    music non-zero from ~5 s onward, TITLE content verified via per-second
+    RMS scan (quiet dip ~54–56 s = TITLE's first-loop boundary). Use this
+    as the reference track when comparing the Apple //e zsmstream output
+    ("slow motion + noise") against the X16 native playback.
 
 ## Conventions
 

@@ -275,7 +275,12 @@ void VERACard::SyncVideo()
 	if (delta == 0)
 		return;
 
-	const bool newFrame = m_video.Step(1, static_cast<int>(delta), false);
+	// VERA's 25 MHz pixel clock is independent of the 6502: the scan engine
+	// must advance by real time, not by CPU cycles. Convert the cycle delta
+	// with the actual (speed-adjusted) CPU clock so VSYNC stays ~59.5 Hz at
+	// any Emulation Speed. (Passing a fixed 1 MHz made VSYNC 181 Hz at 3 MHz.)
+	const double cpuMhz = g_fCurrentCLK6502 / 1000000.0;
+	const bool newFrame = m_video.Step(cpuMhz, static_cast<int>(delta), false);
 	if (newFrame)
 	{
 		m_video.Update();
@@ -342,9 +347,12 @@ BYTE __stdcall VERACard::IOWriteCx(WORD pc, WORD addr, BYTE bWrite, BYTE value, 
 	}
 	// DATA0 is the framebuffer streaming port. A DHGR refresh writes over
 	// 13,000 bytes; logging each byte reopens VERA.log for every write and can
-	// make an interactive display refresh appear to hang. Keep register and
-	// control-port writes in the diagnostic log, but omit pixel stream data.
-	if ((addr & 0x1f) != 0x03)
+	// make an interactive display refresh appear to hang. The PCM FIFO data
+	// port is the same story for audio: an 8-bit mono stream at ~28 kB/s logs
+	// 28,000 lines per second, which drags the emulation below real time and
+	// makes an underrun look like a player bug. Keep register and control-port
+	// writes in the diagnostic log, but omit the bulk stream ports.
+	if ((addr & 0x1f) != 0x03 && (addr & 0x1f) != 0x1d)
 		LogWriteVERALog("VERASD IO write $%04X=$%02X (slot %d)\n", addr, value, slot);
 	pCard->m_video.Write(static_cast<uint8_t>(addr & 0xff), value);
 	return 0;
@@ -487,9 +495,13 @@ void VERACard::UpdateSound()
 	if (m_ymBuffer.size() < static_cast<size_t>(nNumSamples * kNumChannels))
 		m_ymBuffer.resize(nNumSamples * kNumChannels);
 	m_ym.Render(m_ymBuffer.data(), nNumSamples);
+	// X16 Developer Board mixer: mix = (PSG + PCM) * 2 + YM
+	// (x16emu src/audio.c shifts the VERA bus sum left one bit before adding
+	// the YM2151). A full-volume PSG voice is only 1/8 of full scale, so the
+	// VERA bus must be doubled or the PSG/PCM are buried under the FM.
 	for (int i = 0; i < nNumSamples * (int)kNumChannels; ++i)
 	{
-		int mixed = static_cast<int>(m_mixBuffer[i]) + static_cast<int>(m_ymBuffer[i]);
+		int mixed = static_cast<int>(m_mixBuffer[i]) * 2 + static_cast<int>(m_ymBuffer[i]);
 		if (mixed > 32767) mixed = 32767;
 		if (mixed < -32768) mixed = -32768;
 		m_mixBuffer[i] = static_cast<short>(mixed);

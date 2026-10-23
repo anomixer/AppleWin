@@ -6,7 +6,8 @@
 C++ 移植。
 
 > 與 VERA 相關的開發架構、建置與除錯記錄請見 `AGENTS.md`。
-> **註：** 本專案目前已與 AppleWin 上游版本 **v1.32.1.0** 同步。
+> **註：** 本專案已與 AppleWin 上游 **master** 同步（v1.32.1.0 之後：spng
+> PNG 存檔、VS2026 專案、CONTRIBUTING AI 政策），2026-10-22 合併。
 
 ---
 
@@ -26,9 +27,10 @@ C++ 移植。
 - 完整 VERA 音效已完成（PSG 已實作 16 通道 + PCM）。
 - FM 女兒板（Yamaha YM2151；插座可裝真 YM2151 或 OPM2151 FPGA 替換件）已實作並完成端到端驗證（2026-10-16）— 見 §5「FM 女兒板」。
 - SD 卡 SPI（SD/MMC）已實作 — 見 §4「SD 卡 SPI」。
-- 客端音樂播放（veramusic 的 Apple //e zsmstream 播放器）仍在驗證中 —
-  見 `AGENTS.md` → Testing 的「zsmstream player status / TITLE.ZSM
-  noise」條目。
+- 客端音樂播放（veramusic 的 Apple //e zsmstream 播放器）已驗證：TITLE.ZSM
+  與 BOTHPSG.ZSM 可正常播放並乾淨地 loop，PSG 與 FM 都聽得到 — 見
+  `AGENTS.md` → Testing 的「zsmstream player — TITLE.ZSM noise + loop
+  DISK ERR: RESOLVED」條目。
 
 ---
 
@@ -61,10 +63,15 @@ VERA 暫存器位於所選插槽的 **Cx 區域**：`$Cs00–$CsFF`，其中 `ad
 
 ### 2.4 音效
 
-- SSI263 式環形緩衝（`DSGetSoundBuffer` / `DSGetLock`）。
-- `kDSBufferByteSize = 44100 / 60 * 3 * 2 * kNumChannels`（約 3 幀立體聲），
-  避免覆蓋正在播放的音訊。
-- 取樣率 44100 Hz、立體聲；`UpdateSound()` 依 `g_nCumulativeCycles` 產生取樣。
+- 獨立的環形緩衝（`DSGetSoundBuffer` / `DSGetLock`）；
+  `kDSBufferByteSize = 44100 / 60 * 3 * 2 * kNumChannels`（約 3 幀立體聲
+  ≈ 50 ms），初始化時建立 **1/2 緩衝的前導量**。
+- 取樣率 44100 Hz、立體聲。`UpdateSound()` 由 **DS 播放游標**驅動（不是
+  CPU 時鐘）：只產生硬體實際消耗的取樣數（小數累加器），寫入速率與播放
+  完全同步、零漂移。
+- **混音平衡**：`mixed = (PSG + PCM) * 2 + YM`，再夾到 int16 — X16
+  Developer Board 的 VERA 匯流排相對 YM2151 是兩倍（x16emu `src/audio.c`）。
+  單一全音量 PSG 聲道只有滿刻度的 1/8，若 1:1 相加，PSG 會被 FM 蓋掉。
 
 ---
 
@@ -83,25 +90,43 @@ VERA 暫存器位於所選插槽的 **Cx 區域**：`$Cs00–$CsFF`，其中 `ad
 
 ### 顯示時序（AppleWin 整合）
 
-`VERACard::Update()` 被呼叫約 **16 次 / 幀**（每次約 1000 週期的批次）。為避免
-每批次推進不足造成掃描位置漂移（捲動），以及每批次強制完整掃描造成 16 倍速，
-目前做法是**每個 Apple 顯示幀只推進完整一幀**，用累積週期計數器
-`g_nCumulativeCycles` 偵測 Apple 幀邊界：
+`VERACard::Update()` 被呼叫約 **16 次 / 幀**（每次約 1000 週期的批次）。
+目前做法是**依 CPU 週期即時推進**（對應 apple2ts 的 `syncVera()`）：
+`VERACard::SyncVideo()` 依 `g_nCumulativeCycles` 的增量呼叫
+`m_video.Step(cpuMhz, delta)`，且 `IOReadCx`/`IOWriteCx` 在**每次 VERA 暫存器
+存取前**都會先 `SyncVideo()`，所以掃描線暫存器（`$08`）在當下週期就是即時值。
+`g_nCumulativeCycles` 只在 CPU 批次邊界更新，因此 IO handler 會先呼叫
+`CpuCalcCycles(nExecutedCycles)` 校正到精確的讀寫週期，否則掃描線探測會看到
+批次化的值，增量會不均（`64/32` 而非 `32/32`）：
 
 ```cpp
-const uint64_t curCycles = g_nCumulativeCycles;
-if (m_lastFrameCycles == 0)
-    m_lastFrameCycles = curCycles;
-const uint64_t frameCycles = NTSC_GetCyclesPerFrame();
-while (curCycles >= m_lastFrameCycles + frameCycles)
+void VERACard::SyncVideo()
 {
-    m_lastFrameCycles += frameCycles;
-    m_video.Step(1, 16800, false);   // 完整一幀
-    m_video.Update();
-    if (m_video.IsVideoOutputEnabled())
-        UpdateDisplay();
+    const uint64_t now = g_nCumulativeCycles;
+    if (m_lastVideoCycles == 0) m_lastVideoCycles = now;
+    const uint64_t delta = now - m_lastVideoCycles;
+    m_lastVideoCycles = now;
+    if (delta == 0) return;
+    // VERA 的 25 MHz 像素時鐘與 6502 無關：用實際（依速度調整的）CPU
+    // 時鐘換算週期增量，任何 Emulation Speed 下 VSYNC 都維持 ~59.5 Hz。
+    const double cpuMhz = g_fCurrentCLK6502 / 1000000.0;
+    const bool newFrame = m_video.Step(cpuMhz, (int)delta, false);
+    if (newFrame)
+    {
+        m_video.Update();
+        if (m_video.IsVideoOutputEnabled())
+            UpdateDisplay();
+    }
 }
 ```
+
+> 曾嘗試「每個 Apple 幀只推進完整一幀」並已回退：那會讓掃描線在幀內凍結，
+> 而 SMB1 移植版的 VERA-alive 探測會連讀 3 次掃描線並要求平滑變化 — 凍結的
+> 掃描線會讓探測失敗、回報 `NO VERA`。依週期推進才能讓掃描線保持活動。
+>
+> `cpuMhz` 必須取自 `g_fCurrentCLK6502`，不能寫死 1 MHz。本機 //e 跑 3 MHz，
+> 寫死 1 MHz 會讓 VERA 掃描快三倍（VSYNC 181 Hz）；用實際時鐘才會維持
+> ~59.5 Hz。
 
 ---
 
@@ -215,6 +240,13 @@ registry（每 slot 區段，`REGVALUE_VERA_SD_IMAGE` = "SD Card Image"）；`Un
   OPM2151（為老舊 YM2151 設計的現代 FPGA 替換件）—— 無論哪種，模擬的都是
   YM2151。原生 ~55,930 Hz 輸出（晶片時脈 3,579,545 / 64）經線性重取樣到
   44.1 kHz，混入 VERA 的 DS 音效 buffer。
+- **混音平衡**：VERA 匯流排（PSG + PCM）乘 2、YM2151 維持 1× —
+  `mixed = (PSG + PCM) * 2 + YM`，再夾到 int16（見 §2.4）。
+- **ZSM retrigger**：對 `$08` 寫入 operator mask 為 0（`(val & 0x78) == 0`）
+  時，`VERAYM::WriteData` 會時鐘一個原生 YM 取樣（`ClockKeyOff()`），讓緊接
+  而來的 key-on 能重新起音。ymfm 只在每次產生取樣時取樣 key 狀態；少了這個
+  時鐘，同一 tick 內的 key-off + key-on 會互相抵消，第一音之後的每個音都只會
+  衰減。
 - 狀態暫存器會反映晶片的 BUSY 視窗（每次資料寫入後約 32 個晶片時脈 bit 7
   為設置狀態）；客端程式必須**輪詢 `$Cs21` bit 7**。
 - 可逐插槽啟用／停用（VERA 設定對話框的 `FM Card Enabled`，持久化到該插槽
@@ -228,9 +260,9 @@ registry（每 slot 區段，`REGVALUE_VERA_SD_IMAGE` = "SD Card Image"）；`Un
   AppleWin.exe -s2 vera -s6 diskii -d1 fmtest.po -power-on -log -run-cycles 12000000 -fm-wav-dump
   ```
 - 客端音樂播放用 `C:\dev\veramusic` 的 Apple //e ZSM 串流播放器
-  （`zsmstream.asm`，經女兒板輸出 PSG + FM）。其驗證狀態與開著的
-  TITLE.ZSM 問題記錄在 `AGENTS.md` → Testing →
-  "zsmstream player status / TITLE.ZSM noise"。
+  （`zsmstream.asm`，經女兒板輸出 PSG + FM）。已用 TITLE.ZSM 與 BOTHPSG.ZSM
+  驗證（PSG + FM、loop seek 乾淨）；除錯歷史與剩餘限制見 `AGENTS.md` →
+  Testing → "zsmstream player — TITLE.ZSM noise + loop DISK ERR: RESOLVED"。
 
 ---
 
@@ -288,10 +320,11 @@ VERA 卡按「Configure...」。「VERA SD Card」對話框可讓你 **Select Im
 
 ```powershell
 $msbuild = "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe"
-& $msbuild "AppleWin-VS2022.vcxproj" /p:Configuration=Release /p:Platform=Win32 /v:normal /nologo
+& $msbuild "AppleWin-VS2022.sln" /p:Configuration=Release /p:Platform=Win32 /v:normal /nologo
 ```
 
-> 注意：單執行緒建置較穩（`/m` 可能導致「0 Error 但 Build FAILED」）；
+> 注意：務必經 **solution**（不要只建 `.vcxproj`），讓 `TestCPU6502` 的建置
+> 順序正確。單執行緒較穩（`/m` 可能導致「0 Error 但 Build FAILED」）；
 > 建置前若 `AppleWin.exe` 仍在執行會造成 LNK1104，需先 `Stop-Process`。
 
 ---
@@ -306,7 +339,9 @@ $msbuild = "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Curr
 
 ## 9. 已知限制
 
-- VERA 幀率以 Apple 幀率驅動（約 1 幀 / Apple 幀），與真實 59.5 fps 有
-  ~0.8% 差異，實務上不可察覺。
-- 每幀完整一幀的推進方式使 VSYNC/LINE IRQ 在同一時刻觸發，中線光柵特效
-  時序不精確（對多數軟體無影響）。
+- VERA 時間由 CPU 週期換算，換算係數取自目前的模擬速度
+  （`g_fCurrentCLK6502`）。1 MHz 與 3 MHz 下 VSYNC 都維持 ~59.5 Hz 實時，
+  但執行中切換模擬速度會造成掃描相位偏移。
+- CPU 批次之間（`Update()` 約每 1 ms 一次）影片時間是一次推進的。任何
+  VERA 暫存器存取都會先重新同步，所以掃描線探測看到的是即時值；但真正的
+  逐週期中線光柵特效仍是近似。

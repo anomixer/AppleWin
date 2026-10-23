@@ -9,7 +9,9 @@ core is a C++ port of `apple2ts`'s TypeScript implementation
 > For the development architecture, build workflow and debugging notes,
 > see `AGENTS.md`.
 
-> **Note:** This fork is currently synced with AppleWin upstream release **v1.32.1.0**.
+> **Note:** This fork is synced with AppleWin upstream **master** (post
+> v1.32.1.0: PNG saved images via spng, VS2026 projects, CONTRIBUTING AI
+> policy), merged 2026-10-22.
 
 ---
 
@@ -31,9 +33,10 @@ core is a C++ port of `apple2ts`'s TypeScript implementation
 - The FM daughterboard (Yamaha YM2151) is implemented and verified
   end-to-end (2026-10-16) — see §5 "FM daughterboard".
 - The SD card SPI (SD/MMC) is implemented — see §4 "SD card SPI".
-- Guest music playback (veramusic's Apple //e zsmstream player) is under
-  verification — see the "zsmstream player status / TITLE.ZSM noise"
-  note in `AGENTS.md` → Testing.
+- Guest music playback (veramusic's Apple //e zsmstream player) is verified:
+  TITLE.ZSM and BOTHPSG.ZSM play and loop cleanly, with both PSG and FM
+  audible. See `AGENTS.md` → Testing → "zsmstream player — TITLE.ZSM noise
+  + loop DISK ERR: RESOLVED".
 
 ---
 
@@ -70,10 +73,17 @@ output.**
 
 ### 2.4 Audio
 
-- SSI263-style ring buffer (`DSGetSoundBuffer` / `DSGetLock`).
-- `kDSBufferByteSize = 44100 / 60 * 3 * 2 * kNumChannels` (~3 frames of
-  stereo audio), sized so it never overwrites audio that is still playing.
-- Sample rate 44100 Hz, stereo; `UpdateSound()` generates samples.
+- Self-contained ring buffer (`DSGetSoundBuffer` / `DSGetLock`);
+  `kDSBufferByteSize = 44100 / 60 * 3 * 2 * kNumChannels` (~3 frames of
+  stereo audio ≈ 50 ms) with a **1/2-buffer lead** on init.
+- Sample rate 44100 Hz, stereo. `UpdateSound()` is driven by the **DS play
+  cursor**, not the emulated CPU clock: it generates exactly the samples the
+  hardware consumed (fractional accumulator), so the write rate tracks
+  playback with zero drift.
+- **Mixer balance**: `mixed = (PSG + PCM) * 2 + YM`, clamped to int16 — the
+  X16 Developer Board doubles the VERA bus relative to the YM2151 (x16emu
+  `src/audio.c`). A full-volume PSG voice is only 1/8 of full scale, so a 1:1
+  sum buries the PSG under the FM.
 
 ---
 
@@ -95,10 +105,10 @@ output.**
 `VERACard::Update()` is called about **16 times / frame** (each a ~1000-cycle
 batch). The current approach advances VERA **cycle-count driven** (mirrors
 apple2ts's `syncVera()`): `VERACard::SyncVideo()` advances
-`m_video.Step(1, delta)` by the `g_nCumulativeCycles` delta since the last sync,
-and `IOReadCx`/`IOWriteCx` call `SyncVideo()` **before every VERA register
-access** so the scanline register (`$08`) is live at the exact current cycle.
-`g_nCumulativeCycles` is only updated at CPU batch boundaries, so the IO
+`m_video.Step(cpuMhz, delta)` by the `g_nCumulativeCycles` delta since the last
+sync, and `IOReadCx`/`IOWriteCx` call `SyncVideo()` **before every VERA
+register access** so the scanline register (`$08`) is live at the exact current
+cycle. `g_nCumulativeCycles` is only updated at CPU batch boundaries, so the IO
 handlers first call `CpuCalcCycles(nExecutedCycles)` to make it accurate at the
 exact read/write cycle — otherwise the port's scanline probe sees the batched
 value and the deltas come out uneven (`64/32` instead of `32/32`):
@@ -111,7 +121,11 @@ void VERACard::SyncVideo()
     const uint64_t delta = now - m_lastVideoCycles;
     m_lastVideoCycles = now;
     if (delta == 0) return;
-    const bool newFrame = m_video.Step(1, (int)delta, false);
+    // VERA's 25 MHz pixel clock is independent of the 6502: convert the
+    // CPU-cycle delta with the actual (speed-adjusted) CPU clock so VSYNC
+    // stays ~59.5 Hz at any Emulation Speed.
+    const double cpuMhz = g_fCurrentCLK6502 / 1000000.0;
+    const bool newFrame = m_video.Step(cpuMhz, (int)delta, false);
     if (newFrame)
     {
         m_video.Update();
@@ -126,6 +140,10 @@ void VERACard::SyncVideo()
 > and requires it to change smoothly — a frozen scanline fails that probe and
 > the port reports `NO VERA`. Cycle-count-driven stepping keeps the scanline
 > live and is what makes the probe pass.
+>
+> The `cpuMhz` argument must come from `g_fCurrentCLK6502`, not a fixed 1 MHz.
+> This machine runs the //e at 3 MHz, where a fixed 1 MHz made VERA scan three
+> times too fast (VSYNC 181 Hz). With the real clock it stays at ~59.5 Hz.
 
 ---
 
@@ -256,6 +274,13 @@ verification is covered in `test\VERATest\VERATest.cpp` (Test 7).
   output (chip clock
   3,579,545 / 64) is linearly resampled to 44.1 kHz and mixed into the VERA
   DS voice buffer.
+- **Mixer balance**: the VERA bus (PSG + PCM) is doubled and the YM2151 added
+  at 1× — `mixed = (PSG + PCM) * 2 + YM`, clamped to int16 (see §2.4).
+- **ZSM retrigger**: a `$08` write with operator mask 0 (`(val & 0x78) == 0`)
+  clocks one native YM sample in `VERAYM::WriteData` (`ClockKeyOff()`), so an
+  immediately following key-on starts a fresh attack. ymfm only samples the
+  key state once per generated sample; without this, a key-off + key-on in the
+  same tick cancels and every note after the first decays.
 - The status register reflects the chip's BUSY window (bit 7 set for ~32 chip
   clocks after each data write); a guest program must **poll `$Cs21` bit 7**.
 - Enable/disable per slot (`FM Card Enabled` in the VERA configuration
@@ -271,9 +296,10 @@ verification is covered in `test\VERATest\VERATest.cpp` (Test 7).
   AppleWin.exe -s2 vera -s6 diskii -d1 fmtest.po -power-on -log -run-cycles 12000000 -fm-wav-dump
   ```
 - Guest-side music playback uses `C:\dev\veramusic`'s Apple //e ZSM
-  stream player (`zsmstream.asm`, PSG + FM via the daughterboard). Its
-  verification status and the open TITLE.ZSM fault are tracked in
-  `AGENTS.md` → Testing → "zsmstream player status / TITLE.ZSM noise".
+  stream player (`zsmstream.asm`, PSG + FM via the daughterboard). Verified
+  with TITLE.ZSM and BOTHPSG.ZSM (PSG + FM, clean loop seeks); the debugging
+  history and residual limitations are in `AGENTS.md` → Testing →
+  "zsmstream player — TITLE.ZSM noise + loop DISK ERR: RESOLVED".
 
 ---
 
@@ -334,12 +360,13 @@ both take effect together.
 
 ```powershell
 $msbuild = "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe"
-& $msbuild "AppleWin-VS2022.vcxproj" /p:Configuration=Release /p:Platform=Win32 /v:normal /nologo
+& $msbuild "AppleWin-VS2022.sln" /p:Configuration=Release /p:Platform=Win32 /v:normal /nologo
 ```
 
-> Note: single-threaded build is more reliable (`/m` can produce "Build FAILED"
-> with 0 errors); if `AppleWin.exe` is still running the link fails with
-> LNK1104 — stop it first.
+> Note: build via the **solution** (not the individual `.vcxproj`) so the
+> `TestCPU6502` dependency is ordered correctly. Single-threaded is more
+> reliable (`/m` can produce "Build FAILED" with 0 errors); if `AppleWin.exe`
+> is still running the link fails with LNK1104 — stop it first.
 
 ---
 
@@ -353,9 +380,11 @@ $msbuild = "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Curr
 
 ## 9. Known limitations
 
-- The VERA frame rate is driven by the Apple frame rate (~1 frame / Apple
-  frame), which differs from the real 59.5 fps by ~0.8% — imperceptible in
-  practice.
-- The one-full-frame-per-frame advance causes VSYNC/LINE IRQs to fire at the
-  same instant; midline raster-effect timing is imprecise (no impact on most
-  software).
+- VERA time is derived from CPU cycles converted with the configured
+  emulation speed (`g_fCurrentCLK6502`). VSYNC stays ~59.5 Hz real-time at
+  1 MHz and 3 MHz, but changing the emulation speed mid-run shifts the scan
+  phase.
+- Between CPU batches (`Update()` is called every ~1 ms), video time advances
+  in one step. Any guest access to a VERA register resyncs first, so the
+  scanline probe sees live values; true cycle-by-cycle midline raster effects
+  are still approximated.

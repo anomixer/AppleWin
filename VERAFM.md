@@ -26,6 +26,18 @@
 > `### Audio model`, and Testing → "zsmstream player — TITLE.ZSM noise +
 > loop DISK ERR: RESOLVED").
 
+> **Update 2026-10-23 — non-60 Hz ZSM tick rates normalized; the jukebox is
+> the test disk.** `zsmstream.asm` now consumes `TICKS_PER_FRM = tickRate/60`
+> source ticks (plus a `tickRate%60` carry) per 60 Hz output frame, the way
+> zsmkit does, so Headbanger!.ZSM (header rate 240) plays at tempo instead of
+> ~4× slow. Duration labels in `build_melodius.mjs` and `melodius.exe` divide
+> the tick count by the header tick rate, not by 60 (Headbanger: 4:24).
+> Guest playback is verified through `C:\dev\veramusic\melodius.hdv`, the
+> 94-song jukebox:
+> `AppleWin.exe -s2 vera -s7 hdc -h1 C:\dev\veramusic\melodius.hdv -power-on`.
+> (`fmtest.po` is a locally built artifact — it is not committed in
+> `veramusic`; regenerate it with `node veramusic/tools/build_fmtest_po.mjs`.)
+
 ## 1. Project Context & Goal
 * **Target Platforms**: AppleWin (C++) and apple2ts.com (TypeScript).
 * **Objective**: Add cycle-accurate support for the A2VERA FM Audio daughterboard (Yamaha YM2151) running at ~1.023 MHz.

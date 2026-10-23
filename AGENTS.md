@@ -17,6 +17,11 @@ and an IRQ line. The core is a C++ port of `apple2ts`'s TypeScript VERA
 > **Note:** This fork is synced with upstream AppleWin **master** (post
 > v1.32.1.0: PNG saved images via spng, VS2026 projects, CONTRIBUTING AI
 > policy). Merged 2026-10-22 into `feat/verafm`.
+>
+> **Development Model:** The VERA and FM expansion card features in this repository
+> are architected, designed, and verified by human contributors, with implementation
+> and maintenance assisted by AI tools in accordance with upstream's
+> [AI Tool Use Policy](CONTRIBUTING.md#ai-tool-use-policy).
 
 ## Build workflow
 
@@ -181,7 +186,9 @@ the chip's BUSY window:
 >
 > Historical debugging record (2026-10-16, `veramusic` fmtest.po):
 > - `fmtest.po` is a **ProDOS 2.4.3 disk** (280 x 512-byte blocks), built by
->   `veramusic/tools/build_fmtest_po.mjs`. The player files
+>   `veramusic/tools/build_fmtest_po.mjs` (the `.po` itself is a local
+>   artifact — it is not committed in `veramusic`, so build it before
+>   reproducing these runs). The player files
 >   (`FMTEST.BIN`/`FMTEST4.BIN`) are added as type BIN (0x06) with
 >   **aux = 0x2000** and raw program bytes (no DOS 3.3 4-byte addr/len header).
 >   `fmtest_startup.bas` runs them via ProDOS BASIC.SYSTEM's
@@ -703,3 +710,9 @@ IIgs, only-VERA, and VERA+VidHD combinations.
 - The primary user communicates in **Traditional Chinese**; reply in kind.
 - Keep temporary profiling/debug code out of the tree when done (the old
   `QueryPerformanceCounter` profiling block in `VERACard::Update` was removed).
+- **Upstream AI Tool Use Policy (`CONTRIBUTING.md`):**
+  Upstream AppleWin enforces an explicit AI policy (merged from commit `35366c56`):
+  1. **Human in the loop:** A human must supervise and review all contributions (issues, patches, PRs, comments).
+  2. **Explicit marking:** All AI-generated contributions must be explicitly marked as such.
+  3. **Licensing & copyright:** Contributors are responsible for ensuring appropriate rights and licensing compliance under AppleWin's license terms.
+  Any agent or contributor preparing PRs or patches for upstream AppleWin must strictly abide by these rules.

@@ -15,38 +15,25 @@
 
 ---
 
-## 1. 目前 git 狀態（2026-10-22 更新）
+## 1. 目前 git 狀態（2026-10-23 更新）
 
 ```
-branch = feat/verafm（repo 預設分支），HEAD 與 origin/feat/verafm 同步
+branch = feat/verafm（repo 預設分支），HEAD 與 fork/feat/verafm 完全同步
 工作樹：clean；feat/vera 已刪除（本地與 remote）
-分支清理完成：本地 backup/feat-verafm-pre-signature-clean 已刪，
-fork 上舊的 origin/master 已刪（內容已被 feat/verafm 完整包含）
+落後 upstream/master commits: 0
 ```
 
-2026-10-22 已把上游 **master**（`35366c56`，含 spng PNG 存檔、VS2026 專案、
-CONTRIBUTING AI 政策）合併進 `feat/verafm`（merge commit `e2a17136`）。
-衝突只有 `AppleWin-VS2022.vcxproj` 的 include path（上游 `spng` + 本專案
-`source\ymfm` / `source\VERACard`）；另補了 `spng` 專案 Win32 組態缺少的
-`..\zlib` include（上游只設了 x64，Win32 Release 會找不到 `zlib.h`）。
-合併後 Win32 Release 建置成功，headless TITLE 播放 8.1 s、peak 22586、
-無 clipping。
-
-`4e8f14ec` 的內容：
-
-```
-M AGENTS.md, README.md, VERA.md, VERA_tw.md, VERAFM.md, applewin-session.md
-M source/VERACard/VERACard.cpp     — VSYNC cpuMhz 換算 + (PSG+PCM)*2+YM 混音
-M source/VERACard/VERAVideo.cpp/.h — Step(double mhz, ...) 時序
-M source/VERACard/VERAYM.cpp/.h    — ZSM key-off clocking (ClockKeyOff)
-```
+2026-10-23 已透過正式 merge commit `60f23eaf` 將上游 **master**（`35366c56`，含 spng PNG 存檔、VS2026 專案、
+CONTRIBUTING AI 政策）完整記錄在 commit graph 中。解決了因先前 squash 導致落後 4 commits 的假象，
+程式碼內容 100% 相同且無 conflict。
+Win32 / x64 Release 建置均 0 error 通過。
 
 近期 commit（本 branch 頂端往下）：
 
 ```
-HEAD      docs(verafm): mark the session handoff as committed/pushed
-e2a17136  Merge upstream master into feat/verafm
-4e8f14ec  fix(verafm): YM retrigger clocking, X16 mixer balance, speed-aware VERA time
+60f23eaf  Merge branch 'master' of https://github.com/AppleWin/AppleWin into feat/verafm
+47a008ec  feat(verafm): YM retrigger, X16 mix balance, speed-aware VERA time + PCM docs
+1a7eac32  docs(verafm): record zsmstream TITLE-noise status; update session notes
 1f375f9c  docs(verafm): update TITLE-noise status ...; add melodius ground-truth workbench
 1a7eac32  docs(verafm): record zsmstream TITLE-noise status; update session notes
 58aea9c7  docs(verafm): record zsmstream player debugging lessons
@@ -143,15 +130,16 @@ headless `-fm-wav-dump` 各段峰值 0.13–0.26（舊 dump 卡在鼓聲底噪 0
   播到 `T:00:16.5` 無 DISK ERR；正式片開機到 17 類選單正常。
   AppleWin 端**沒改**：`VERAAudio` 的 rate/format/volume 與參考渲染器
   `veramusic/tools/melodius.cpp` 完全一致。
-- 已刪（`git rm`，尚未 commit）：`zsmstream.hdv(.zip)`、`zsmstream_a.hdv(.zip)`、
+- 已刪（連同 `melodius.hdv(.zip)`、`src/MELODIUS{,4}.BIN` 一起收錄在 veramusic
+  `5a7558f`，已 push）：`zsmstream.hdv(.zip)`、`zsmstream_a.hdv(.zip)`、
   `src/ZSMSTREAM{,4,A}.BIN`、`src/zsmstream_{startup,autostart}.bas`、
   `tools/build_zsmstream{,_hdv}.mjs`；`build.bat` 的 `zsmstream` 目標改跑
   `build_melodius.mjs`（目標名 `melodius` 亦可）。`src/zsmstream.asm` 保留為引擎。
-- 工作樹剩**未追蹤**檔：新的 `melodius.hdv(.zip)`、`src/MELODIUS{,4}.BIN`、
-  以及使用者的除錯暫存（`tools/*.py`、`dis6502.*`、`state_fmfix.aws`、
+- veramusic 工作樹的**未追蹤**檔目前只剩使用者的除錯暫存（`tools/*.py`、
+  `dis6502.*`、`state_fmfix.aws`、
   `AppleWin.log`、`33A7.`、`PRODOS#FF0000`、`_extract/` 等）。
   **使用者說要自己清 `tools/*.py`**，勿代刪、勿 commit。
-  本 session 自己產的截圖/WAV 已清掉。
+  本 session 自己產的截圖/WAV 已清掉（驗證截圖改放 `C:\temp_pcm\shots_*`）。
 
 ---
 
@@ -184,9 +172,18 @@ headless `-fm-wav-dump` 各段峰值 0.13–0.26（舊 dump 卡在鼓聲底噪 0
   + FM key-off + PSG 靜音；實測 12 s 中斷後剩餘 8 s 的 dump 全零。
 - **melodius.exe 狀態列**改為使用者指定格式：
   `mm:ss/mm:ss [===============>] [FM ........] [PSG ......#....] [PCM --] V:15 FM:1.00 PSG:2.00 PCM:2.00 [1SHT]`。
+- **非 60 Hz tick rate 正規化（Headbanger! 聽起來 4× 太慢）**：`zsmstream.asm`
+  現在比照 zsmkit — `DECODE_FRAME` 每個 60 Hz 輸出影格吃掉
+  `TICKS_PER_FRM = rate/60` 個來源 tick，`TICK_REM = rate%60` 進位累積在
+  `FRAC`；rate < 60 輸出 hold 影格。`FRM` 改數來源 tick，5 s 跳轉因此用
+  `5 * TICKRATE`。選單時長（`build_melodius.mjs`）與 `melodius.exe` 的
+  mm:ss 也改成 `ticks ÷ header tick rate`（Headbanger 240 Hz：17:34 →
+  **4:24**，離線 WAV 263.6 s 且與舊渲染的前 263.6 s 完全相同）。
+  94 首裡 11 首非 60 Hz。驗證：3 MHz 與預設 1.02 MHz 都连续 RMS 2400–3200、
+  零樣本比 0.00004，60/64/50 Hz 歌曲迴歸正常（合併影格最大 510 B < FB 512 B）。
 - AppleWin 本體唯一改動：`VERACard.cpp` 的 VERA.log 過濾新增
   `(addr & 0x1f) != 0x1d`（PCM FIFO 資料埠），避免 `-log` 拖慢量測。
-  Release/Win32 已重建、探針已移除。
+  Release **Win32 與 x64 皆已重建**、探針已移除。
 
 ---
 

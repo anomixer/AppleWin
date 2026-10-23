@@ -261,10 +261,17 @@ registry（每 slot 區段，`REGVALUE_VERA_SD_IMAGE` = "SD Card Image"）；`Un
   ```
   AppleWin.exe -s2 vera -s6 diskii -d1 fmtest.po -power-on -log -run-cycles 12000000 -fm-wav-dump
   ```
+  （`fmtest.po` 沒有收進 `veramusic` 的 repo；要先用
+  `node veramusic/tools/build_fmtest_po.mjs` 建出來。）
 - 客端音樂播放用 `C:\dev\veramusic` 的 Apple //e ZSM 串流播放器
-  （`zsmstream.asm`，經女兒板輸出 PSG + FM）。已用 TITLE.ZSM 與 BOTHPSG.ZSM
-  驗證（PSG + FM、loop seek 乾淨）；除錯歷史與剩餘限制見 `AGENTS.md` →
-  Testing → "zsmstream player — TITLE.ZSM noise + loop DISK ERR: RESOLVED"。
+  （`zsmstream.asm`，經女兒板輸出 PSG + FM + PCM），以 94 首的
+  `melodius.hdv` 點歌台形式交付：
+  `AppleWin.exe -s2 vera -s7 hdc -h1 C:\dev\veramusic\melodius.hdv -power-on`。
+  已用 TITLE.ZSM 與 BOTHPSG.ZSM 驗證（PSG + FM、loop seek 乾淨），非 60 Hz
+  的檔案也正常：播放器會把 ZSM header 的 tick rate 正規化成 60 Hz 輸出影格
+  （zsmkit 語意），所以 240 ticks/s 的 Headbanger! 以正確速度播放。除錯歷史
+  與剩餘限制見 `AGENTS.md` → Testing →
+  "zsmstream player — TITLE.ZSM noise + loop DISK ERR: RESOLVED"。
 
 ---
 

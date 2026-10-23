@@ -186,7 +186,9 @@ the chip's BUSY window:
 >
 > Historical debugging record (2026-10-16, `veramusic` fmtest.po):
 > - `fmtest.po` is a **ProDOS 2.4.3 disk** (280 x 512-byte blocks), built by
->   `veramusic/tools/build_fmtest_po.mjs`. The player files
+>   `veramusic/tools/build_fmtest_po.mjs` (the `.po` itself is a local
+>   artifact — it is not committed in `veramusic`, so build it before
+>   reproducing these runs). The player files
 >   (`FMTEST.BIN`/`FMTEST4.BIN`) are added as type BIN (0x06) with
 >   **aux = 0x2000** and raw program bytes (no DOS 3.3 4-byte addr/len header).
 >   `fmtest_startup.bas` runs them via ProDOS BASIC.SYSTEM's

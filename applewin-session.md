@@ -130,15 +130,16 @@ headless `-fm-wav-dump` 各段峰值 0.13–0.26（舊 dump 卡在鼓聲底噪 0
   播到 `T:00:16.5` 無 DISK ERR；正式片開機到 17 類選單正常。
   AppleWin 端**沒改**：`VERAAudio` 的 rate/format/volume 與參考渲染器
   `veramusic/tools/melodius.cpp` 完全一致。
-- 已刪（`git rm`，尚未 commit）：`zsmstream.hdv(.zip)`、`zsmstream_a.hdv(.zip)`、
+- 已刪（連同 `melodius.hdv(.zip)`、`src/MELODIUS{,4}.BIN` 一起收錄在 veramusic
+  `5a7558f`，已 push）：`zsmstream.hdv(.zip)`、`zsmstream_a.hdv(.zip)`、
   `src/ZSMSTREAM{,4,A}.BIN`、`src/zsmstream_{startup,autostart}.bas`、
   `tools/build_zsmstream{,_hdv}.mjs`；`build.bat` 的 `zsmstream` 目標改跑
   `build_melodius.mjs`（目標名 `melodius` 亦可）。`src/zsmstream.asm` 保留為引擎。
-- 工作樹剩**未追蹤**檔：新的 `melodius.hdv(.zip)`、`src/MELODIUS{,4}.BIN`、
-  以及使用者的除錯暫存（`tools/*.py`、`dis6502.*`、`state_fmfix.aws`、
+- veramusic 工作樹的**未追蹤**檔目前只剩使用者的除錯暫存（`tools/*.py`、
+  `dis6502.*`、`state_fmfix.aws`、
   `AppleWin.log`、`33A7.`、`PRODOS#FF0000`、`_extract/` 等）。
   **使用者說要自己清 `tools/*.py`**，勿代刪、勿 commit。
-  本 session 自己產的截圖/WAV 已清掉。
+  本 session 自己產的截圖/WAV 已清掉（驗證截圖改放 `C:\temp_pcm\shots_*`）。
 
 ---
 
@@ -171,9 +172,18 @@ headless `-fm-wav-dump` 各段峰值 0.13–0.26（舊 dump 卡在鼓聲底噪 0
   + FM key-off + PSG 靜音；實測 12 s 中斷後剩餘 8 s 的 dump 全零。
 - **melodius.exe 狀態列**改為使用者指定格式：
   `mm:ss/mm:ss [===============>] [FM ........] [PSG ......#....] [PCM --] V:15 FM:1.00 PSG:2.00 PCM:2.00 [1SHT]`。
+- **非 60 Hz tick rate 正規化（Headbanger! 聽起來 4× 太慢）**：`zsmstream.asm`
+  現在比照 zsmkit — `DECODE_FRAME` 每個 60 Hz 輸出影格吃掉
+  `TICKS_PER_FRM = rate/60` 個來源 tick，`TICK_REM = rate%60` 進位累積在
+  `FRAC`；rate < 60 輸出 hold 影格。`FRM` 改數來源 tick，5 s 跳轉因此用
+  `5 * TICKRATE`。選單時長（`build_melodius.mjs`）與 `melodius.exe` 的
+  mm:ss 也改成 `ticks ÷ header tick rate`（Headbanger 240 Hz：17:34 →
+  **4:24**，離線 WAV 263.6 s 且與舊渲染的前 263.6 s 完全相同）。
+  94 首裡 11 首非 60 Hz。驗證：3 MHz 與預設 1.02 MHz 都连续 RMS 2400–3200、
+  零樣本比 0.00004，60/64/50 Hz 歌曲迴歸正常（合併影格最大 510 B < FB 512 B）。
 - AppleWin 本體唯一改動：`VERACard.cpp` 的 VERA.log 過濾新增
   `(addr & 0x1f) != 0x1d`（PCM FIFO 資料埠），避免 `-log` 拖慢量測。
-  Release/Win32 已重建、探針已移除。
+  Release **Win32 與 x64 皆已重建**、探針已移除。
 
 ---
 

@@ -299,11 +299,18 @@ verification is covered in `test\VERATest\VERATest.cpp` (Test 7).
   ```
   AppleWin.exe -s2 vera -s6 diskii -d1 fmtest.po -power-on -log -run-cycles 12000000 -fm-wav-dump
   ```
+  (`fmtest.po` is not committed in `veramusic`; build it first with
+  `node veramusic/tools/build_fmtest_po.mjs`.)
 - Guest-side music playback uses `C:\dev\veramusic`'s Apple //e ZSM
-  stream player (`zsmstream.asm`, PSG + FM via the daughterboard). Verified
-  with TITLE.ZSM and BOTHPSG.ZSM (PSG + FM, clean loop seeks); the debugging
-  history and residual limitations are in `AGENTS.md` → Testing →
-  "zsmstream player — TITLE.ZSM noise + loop DISK ERR: RESOLVED".
+  stream player (`zsmstream.asm`, PSG + FM + PCM via the daughterboard),
+  shipped as the 94-song `melodius.hdv` jukebox:
+  `AppleWin.exe -s2 vera -s7 hdc -h1 C:\dev\veramusic\melodius.hdv -power-on`.
+  Verified with TITLE.ZSM and BOTHPSG.ZSM (PSG + FM, clean loop seeks) and
+  with the non-60 Hz files: the player normalizes a ZSM header tick rate to
+  60 Hz output frames (zsmkit semantics), so Headbanger! at 240 ticks/s
+  plays at tempo. The debugging history and residual limitations are in
+  `AGENTS.md` → Testing → "zsmstream player — TITLE.ZSM noise + loop DISK
+  ERR: RESOLVED".
 
 ---
 

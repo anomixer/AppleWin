@@ -23,7 +23,7 @@ Peripheral cards and add-on hardware supported:
 - Super Serial Card (SSC)
 - Parallel printer card
 - Mouse interface
-- Apple IIe Extended 80-Column Text Card and RamWorks III (8MB)
+- Apple IIe Extended 80-Column Text Card and RamWorks III (16MB)
 - RGB cards: Apple's Extended 80-Column Text/AppleColor Adaptor Card and 'Le Chat Mauve' Féline.
 - CP/M SoftCard
 - Uthernet I and II (ethernet cards)
@@ -110,16 +110,6 @@ Building
 To compile for Windows from source see:
 
 * [docs/compiling.txt](https://github.com/AppleWin/AppleWin/blob/master/docs/compiling.txt)
-
-Debugging
-=========
-If you are experencing a system-wide input unresponsiveness when debugging under MSVC 2022 then use the command-line argument `-no-hook-system-key` to prevent an input thread for system keys. See `g_bHookSystemKey`, `HookFilter::HookFilterForKeyboard()` and `HookFilter::HookThread()`.
-
-Alternative work arounds include:
-
-* Debug with MSVC 2026,
-* Debug with MSVC 2019, or
-* Manually use the older v5.01 Windows Common Controls.
 
 Unofficial Ports
 ================

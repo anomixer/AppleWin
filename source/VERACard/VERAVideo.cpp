@@ -76,6 +76,9 @@ void VERAVideo::Reset()
 	m_irq_line = 0;
 	// init Layer registers
 	memset(m_reg_layer, 0, sizeof(m_reg_layer));
+	memset(m_layer_properties, 0, sizeof(m_layer_properties));
+	for (int layer = 0; layer < NUM_LAYERS; layer++)
+		refresh_layer_properties(layer);
 	// init composer registers
 	memset(m_reg_composer, 0, sizeof(m_reg_composer));
 	m_reg_composer[1] = 128; // hscale = 1.0
@@ -113,7 +116,10 @@ void VERAVideo::Reset()
 	m_fx_affine_clip = false;
 	// init sprite data
 	for (int i = 0; i < NUM_SPRITES; i++)
+	{
 		memset(m_sprite_data[i].data(), 0, 8);
+		refresh_sprite_properties(i);
+	}
 	// copy palette
 	for (int i = 0; i < 256; i++)
 	{
@@ -136,6 +142,15 @@ void VERAVideo::Reset()
 	memset(m_prev_layer_properties, 0, sizeof(m_prev_layer_properties));
 	memset(m_layer_line_enable, 0, sizeof(m_layer_line_enable));
 	memset(m_old_layer_line_enable, 0, sizeof(m_old_layer_line_enable));
+	// Disabled planes still participate in the compositor as transparent line
+	// buffers. Clear them on reset too: the enable-history flags above no longer
+	// describe the old buffers, so the normal disable transition cannot clear
+	// them. Uninitialized or stale pixels otherwise become vertical stripes.
+	memset(m_layer_line, 0, sizeof(m_layer_line));
+	memset(m_sprite_line_col, 0, sizeof(m_sprite_line_col));
+	memset(m_sprite_line_z, 0, sizeof(m_sprite_line_z));
+	memset(m_sprite_line_mask, 0, sizeof(m_sprite_line_mask));
+	memset(m_col_line, 0, sizeof(m_col_line));
 	m_sprite_line_enable = false;
 	m_old_sprite_line_enable = false;
 	m_y_prev = -1;

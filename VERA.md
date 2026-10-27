@@ -19,6 +19,11 @@ core is a C++ port of `apple2ts`'s TypeScript implementation
 
 ---
 
+> **2026-10-27 FM I/O migration (AI-assisted implementation):** FM now uses
+> `/DEVICE SELECT` (Slot 2 `$C0A0/$C0A1`, Slot 4 `$C0C0/$C0C1`). Guest
+> programs/disks built for the old `$Cs20/$Cs21` mapping must be rebuilt
+> with the new addresses before FM playback verification.
+
 ## 1. Overview
 
 - The VERA card can be installed in **Slot 2 or Slot 4**.
@@ -50,7 +55,7 @@ core is a C++ port of `apple2ts`'s TypeScript implementation
 
 The VERA registers live in the **Cx region** of the selected slot:
 `$Cs00–$CsFF`, where `addr & 0xff` selects the register. Registered via
-`RegisterIoHandler(slot, IO_Null, IO_Null, &IOReadCx, &IOWriteCx, ...)`
+`RegisterIoHandler(slot, &IOReadC0, &IOWriteC0, &IOReadCx, &IOWriteCx, ...)`
 (see `VERACard::InitializeIO`).
 
 ### 2.2 Display (dual-screen design)
@@ -268,9 +273,10 @@ verification is covered in `test\VERATest\VERATest.cpp` (Test 7).
 ### FM daughterboard (YM2151)
 
 - The A2VERA board (prototype hardware "EV1" release) adds a Yamaha YM2151
-  FM chip addressed through the VERA Cx region: `$Cs20` = `YM_REG` (register
-  select), `$Cs21` =
-  `YM_DATA` (data write / status read), mirroring the X16's `$9F40`/`$9F41`.
+  FM chip addressed through `/DEVICE SELECT`: `$C080 + slot*$10 + 0` =
+  `YM_SEL` (register select), `+1` = `YM_DATA` (data write / status read).
+  Slot 2 uses `$C0A0/$C0A1`; Slot 4 uses `$C0C0/$C0C1`. The legacy
+  `$Cs20/$Cs21` FM mapping is removed; VERA video/SD remain in the Cx region.
 - Emulated by `source/VERACard/VERAYM.h/.cpp` wrapping the `ymfm::ym2151`
   core (`source/ymfm/`, BSD-3-Clause): the socket can take a genuine YM2151
   or the OPM2151 (a modern FPGA drop-in replacement for the vintage YM2151)
@@ -286,10 +292,10 @@ verification is covered in `test\VERATest\VERATest.cpp` (Test 7).
   key state once per generated sample; without this, a key-off + key-on in the
   same tick cancels and every note after the first decays.
 - The status register reflects the chip's BUSY window (bit 7 set for ~32 chip
-  clocks after each data write); a guest program must **poll `$Cs21` bit 7**.
+  clocks after each data write); a guest program must **poll `YM_DATA` bit 7**.
 - Enable/disable per slot (`FM Card Enabled` in the VERA configuration
-  dialog, persisted in the per-slot registry). When disabled, `$Cs20`/`$Cs21`
-  fall through to the regular VERA register handling.
+  dialog, persisted in the per-slot registry). When disabled, FM ports use
+  the normal empty-slot I/O behavior (`IO_Null`).
 - Verified end-to-end (2026-10-16): a guest program writing the standard
   init + key-on sequence produces a full-scale FM tone. Automated
   verification: `-fm-wav-dump` captures the first 20 s of the mixed VERA
@@ -389,6 +395,14 @@ $msbuild = "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Curr
 
 ---
 
+### Renderer reset
+
+Reset clears all layer/sprite/compositor line buffers and reconstructs derived
+properties from the reset registers. Disabled planes must contain transparent
+pixels; stale or uninitialized line buffers previously caused vertical stripes
+over the slideshow image and text. This fix was AI-assisted. Tests 8/9 cover
+previously active Layer 1 and sprite state across reset.
+
 ## 9. Known limitations
 
 - VERA time is derived from CPU cycles converted with the configured
@@ -399,3 +413,12 @@ $msbuild = "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Curr
   in one step. Any guest access to a VERA register resyncs first, so the
   scanline probe sees live values; true cycle-by-cycle midline raster effects
   are still approximated.
+
+## 10. Verification (2026-10-27)
+
+Both Release solution builds pass (Win32/x64), including the CPU pre-build
+test. The VERA core suite passes 26/26 checks. New-mapping runtime coverage
+includes 26 Win32 cases and 2 x64 cases; another 8 RGB/full-scanline runs cover
+the reset fix. Guest images `veratest.po`, `slideshow.hdv` and its ZIP were
+rebuilt in the companion `veratest` repository. See `VERAFM.md` sections 6/7
+for assertions, temporary QA image differences and human verification scope.

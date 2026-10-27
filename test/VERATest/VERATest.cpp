@@ -240,6 +240,64 @@ int main()
 		remove(tmp_path);
 	}
 
+	// --- Test 8: Reset must discard pixels from a previously enabled layer. ---
+	{
+		VERAVideo resetVideo;
+		memset(resetVideo.GetVideoRAM(), 2, 320 * 240);
+		resetVideo.Write(0x14, 0x07); // Layer 1: 8bpp bitmap, 320 pixels wide
+		resetVideo.Write(0x16, 0x00);
+		resetVideo.Write(0x0A, 64);
+		resetVideo.Write(0x0B, 64);
+		resetVideo.Write(0x09, 0x21); // Layer 1 only, red pixels
+		resetVideo.Step(1.0, 16800 * 3, false);
+		CHECK(resetVideo.GetFramebuffer()[0] == 0x88, "Test8: Layer 1 rendered red before reset");
+
+		resetVideo.Reset();
+		memset(resetVideo.GetVideoRAM(), 1, 320 * 240);
+		resetVideo.Write(0x0D, 0x07); // Layer 0 only, white pixels
+		resetVideo.Write(0x0F, 0x00);
+		resetVideo.Write(0x0A, 64);
+		resetVideo.Write(0x0B, 64);
+		resetVideo.Write(0x09, 0x11);
+		resetVideo.Step(1.0, 16800 * 3, false);
+		const uint8_t* fb = resetVideo.GetFramebuffer();
+		bool allWhite = true;
+		for (int i = 0; i < 640 * 480; i++)
+			if (fb[i * 4] != 255 || fb[i * 4 + 1] != 255 || fb[i * 4 + 2] != 255)
+				allWhite = false;
+		CHECK(allWhite, "Test8: disabled Layer 1 leaves no stale pixels after reset");
+	}
+
+	// --- Test 9: Reset must discard the last visible sprite scanline. ---
+	{
+		VERAVideo resetVideo;
+		memset(resetVideo.GetVideoRAM(), 2, 64); // Red 8x8 sprite bitmap
+		resetVideo.Write(0x00, 0x00);
+		resetVideo.Write(0x01, 0xFC);
+		resetVideo.Write(0x02, 0x11); // Sprite attributes at $1FC00, increment +1
+		const uint8_t sprite[] = {0, 0x80, 0, 0, 0xD8, 1, 0x0C, 0}; // x=0, y=472, front
+		for (size_t i = 0; i < sizeof(sprite); i++)
+			resetVideo.Write(0x03, sprite[i]);
+		resetVideo.Write(0x09, 0x41); // Sprites only, last visible line has red pixels
+		resetVideo.Step(1.0, 16800 * 3, false);
+		CHECK(resetVideo.GetFramebuffer()[(479 * 640) * 4] == 0x88, "Test9: sprite rendered on last visible line before reset");
+
+		resetVideo.Reset();
+		memset(resetVideo.GetVideoRAM(), 1, 320 * 240);
+		resetVideo.Write(0x0D, 0x07);
+		resetVideo.Write(0x0F, 0x00);
+		resetVideo.Write(0x0A, 64);
+		resetVideo.Write(0x0B, 64);
+		resetVideo.Write(0x09, 0x11); // Layer 0 only, sprites disabled
+		resetVideo.Step(1.0, 16800 * 3, false);
+		const uint8_t* fb = resetVideo.GetFramebuffer();
+		bool allWhite = true;
+		for (int i = 0; i < 640 * 480; i++)
+			if (fb[i * 4] != 255 || fb[i * 4 + 1] != 255 || fb[i * 4 + 2] != 255)
+				allWhite = false;
+		CHECK(allWhite, "Test9: disabled sprites leave no vertical stripes after reset");
+	}
+
 	fprintf(stderr, "\nResult: %d passed, %d failed\n", g_passes, g_failures);
 	fflush(stderr);
 	return g_failures == 0 ? 0 : 1;

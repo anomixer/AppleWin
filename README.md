@@ -50,13 +50,14 @@ graphics core (2 layers, 128 sprites, 256-colour palette), a 16-channel PSG +
 PCM audio core, an SD card (SPI) storage interface, and an IRQ line.
 
 **FM daughterboard (YM2151)** — the A2VERA board (prototype hardware "EV1"
-release) adds a Yamaha YM2151 FM chip addressed through the VERA Cx region.
+release) adds a Yamaha YM2151 FM chip addressed through /DEVICE SELECT.
 The socket can take a genuine YM2151 or the OPM2151 (a modern FPGA
 drop-in replacement for the vintage YM2151) — the emulated chip is the
 YM2151 either way:
 
-- `$Cs20` = `YM_REG` (register select), `$Cs21` = `YM_DATA` (data write /
-  status read) — mirroring the X16's `$9F40` / `$9F41`.
+- `YM_SEL` (register select) and `YM_DATA` (data write / status read) use
+  `/DEVICE SELECT`: `$C080 + slot*$10 + 0/1`. Slot 2: `$C0A0/$C0A1`;
+  Slot 4: `$C0C0/$C0C1`. The legacy `$Cs20/$Cs21` FM mapping is removed.
 - The chip is wrapped in `source/VERACard/VERAYM.h/.cpp` around the
   `ymfm::ym2151` core (`source/ymfm/`, BSD-3-Clause). Native ~55,930 Hz output
   is linearly resampled to 44.1 kHz and mixed into the VERA DS voice buffer.
@@ -67,15 +68,20 @@ YM2151 either way:
   before an immediately following key-on, so every note re-attacks instead of
   only the first one.
 - Can be enabled/disabled per slot (`FM Card Enabled` in the VERA configuration
-  dialog, persisted per-slot in the registry). When disabled, `$Cs20`/`$Cs21`
-  fall through to the regular VERA register handling.
+  dialog, persisted per-slot in the registry). When disabled, FM ports use
+  the normal empty-slot I/O behavior (`IO_Null`).
 - Verified end-to-end (2026-10-16): a guest program writing the standard
-  init + key-on sequence through `$Cs20`/`$Cs21` produces a full-scale FM
-  tone in the emulator's audio output. The veramusic Apple //e ZSM stream
+  init + key-on sequence through the legacy `$Cs20`/`$Cs21` mapping produces
+  a full-scale FM tone in the emulator's audio output. The veramusic Apple //e ZSM stream
   player (TITLE.ZSM, BOTHPSG.ZSM) also plays through this chain with PSG + FM.
   For automated verification, `-fm-wav-dump` captures the first 20 s of the
   mixed VERA buffer (stereo 16-bit @ 44100) to `VERA-fm.wav` next to the exe —
   opt-in; without the flag nothing is written.
+
+> **2026-10-27 FM I/O migration (AI-assisted implementation):** FM now uses
+> `/DEVICE SELECT` (Slot 2 `$C0A0/$C0A1`, Slot 4 `$C0C0/$C0C1`). Guest
+> programs/disks built for the old `$Cs20/$Cs21` mapping must be rebuilt
+> with the new addresses before FM playback verification.
 
 Behaviour:
 
@@ -96,6 +102,13 @@ Behaviour:
 - **Diagnostics** — on a stall (emulator hang) the DS buffer is flushed so no
   lingering audio survives. Heartbeat + unhandled-exception info is written to
   `VERA.log` next to the exe (independent of the `-log` `AppleWin.log`).
+
+VERA reset clears layer/sprite scanline caches and rebuilds their derived
+properties, preventing stale disabled planes from painting vertical stripes
+over bitmaps and OSD text. The current Win32/x64 Release builds pass, the core
+suite passes 26/26 checks, and rebuilt [veratest](https://github.com/anomixer/veratest)
+images exercise the new FM mapping in both slots. See [VERAFM.md](VERAFM.md#6-new-mapping-verification-2026-10-27)
+for test coverage and remaining human verification.
 
 Running
 =======

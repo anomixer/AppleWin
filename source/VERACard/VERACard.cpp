@@ -189,8 +189,9 @@ VERACard::~VERACard()
 
 void VERACard::InitializeIO(LPBYTE pCxRomPeripheral)
 {
-	// VERA has no ROM; registers live in the Cx region ($Cs00-$CsFF)
-	RegisterIoHandler(m_slot, IO_Null, IO_Null, &VERACard::IOReadCx, &VERACard::IOWriteCx, this, NULL);
+	// VERA uses /IO SELECT ($Cs00-$CsFF); FM uses /DEVICE SELECT
+	// ($C080 + slot*$10: YM_SEL at +0, YM_DATA/status at +1).
+	RegisterIoHandler(m_slot, &VERACard::IOReadC0, &VERACard::IOWriteC0, &VERACard::IOReadCx, &VERACard::IOWriteCx, this, NULL);
 }
 
 void VERACard::Destroy()
@@ -308,6 +309,33 @@ void VERACard::SyncSPI()
 // IO handlers
 // ---------------------------------------------------------------------------
 
+// FM daughterboard: /DEVICE SELECT, separate from the VERA Cx registers.
+BYTE __stdcall VERACard::IOReadC0(WORD pc, WORD addr, BYTE bWrite, BYTE value, ULONG nExecutedCycles)
+{
+	const UINT slot = ((addr & 0xff) >> 4) - 8;
+	VERACard* pCard = (VERACard*)MemGetSlotParameters(slot);
+	if (!pCard || !pCard->m_bFMEnabled || (addr & 0x0f) != 0x01)
+		return IO_Null(pc, addr, bWrite, value, nExecutedCycles);
+
+	CpuCalcCycles(nExecutedCycles);
+	return pCard->m_ym.ReadData(); // YM_DATA: status; YM_SEL is write-only
+}
+
+BYTE __stdcall VERACard::IOWriteC0(WORD pc, WORD addr, BYTE bWrite, BYTE value, ULONG nExecutedCycles)
+{
+	const UINT slot = ((addr & 0xff) >> 4) - 8;
+	VERACard* pCard = (VERACard*)MemGetSlotParameters(slot);
+	if (!pCard || !pCard->m_bFMEnabled || (addr & 0x0f) > 0x01)
+		return IO_Null(pc, addr, bWrite, value, nExecutedCycles);
+
+	CpuCalcCycles(nExecutedCycles);
+	if ((addr & 0x0f) == 0x00)
+		pCard->m_ym.WriteRegSelect(value); // YM_SEL
+	else
+		pCard->m_ym.WriteData(value); // YM_DATA
+	return 0;
+}
+
 BYTE __stdcall VERACard::IOReadCx(WORD pc, WORD addr, BYTE bWrite, BYTE value, ULONG nExecutedCycles)
 {
 	const UINT slot = (addr >> 8) & 0xf;
@@ -318,10 +346,6 @@ BYTE __stdcall VERACard::IOReadCx(WORD pc, WORD addr, BYTE bWrite, BYTE value, U
 	CpuCalcCycles(nExecutedCycles);	// make g_nCumulativeCycles accurate at this read (IO reads are batched)
 	pCard->SyncVideo();	// keep the scanline register live at this exact cycle
 	pCard->SyncSPI();	// advance the SD SPI so a guest's BUSY poll sees the byte ready
-	if ((addr & 0xff) == 0x20 && pCard->m_bFMEnabled)
-		return 0;	// YM_REG is write-only
-	if ((addr & 0xff) == 0x21 && pCard->m_bFMEnabled)
-		return pCard->m_ym.ReadData();	// YM_DATA: status
 	return pCard->m_video.Read(static_cast<uint8_t>(addr & 0xff), false);
 }
 
@@ -335,16 +359,6 @@ BYTE __stdcall VERACard::IOWriteCx(WORD pc, WORD addr, BYTE bWrite, BYTE value, 
 	CpuCalcCycles(nExecutedCycles);	// make g_nCumulativeCycles accurate at this write (IO reads are batched)
 	pCard->SyncVideo();	// keep the scanline register live at this exact cycle
 	pCard->SyncSPI();	// advance the SD SPI so a byte sent by the guest starts clocking
-	if ((addr & 0xff) == 0x20 && pCard->m_bFMEnabled)
-	{
-		pCard->m_ym.WriteRegSelect(value);
-		return 0;
-	}
-	if ((addr & 0xff) == 0x21 && pCard->m_bFMEnabled)
-	{
-		pCard->m_ym.WriteData(value);
-		return 0;
-	}
 	// DATA0 is the framebuffer streaming port. A DHGR refresh writes over
 	// 13,000 bytes; logging each byte reopens VERA.log for every write and can
 	// make an interactive display refresh appear to hang. The PCM FIFO data

@@ -2,9 +2,9 @@
   VERAYM.h - A2VERA FM audio (Yamaha YM2151 / OPM2151) wrapper around ymfm
 
   The OPM2151 daughterboard plugs into the VERA card and is accessed through
-  the Cx region at offset $20 (YM_REG, register select) and $21 (YM_DATA,
-  read/write data, read returns the status register), mirroring the X16
-  ($9F20 + 0x20 = $9F40, $9F20 + 0x21 = $9F41).
+  /DEVICE SELECT at $C080 + slot*$10: offset $0 is YM_SEL (register select),
+  offset $1 is YM_DATA (data write / status read). Slot 2 uses $C0A0/$C0A1;
+  slot 4 uses $C0C0/$C0C1.
 
   The wrapper owns a ymfm::ym2151 core (BSD licensed, Aaron Giles) and
   produces 16-bit stereo samples at the chip's native sample rate, resampled
@@ -26,7 +26,7 @@ public:
 
 	void Reset();
 
-	// Host register interface (YM_REG = $20, YM_DATA = $21)
+	// Host register interface (YM_SEL = offset $0, YM_DATA = offset $1)
 	void WriteRegSelect(uint8_t value);	// write to address port
 	void WriteData(uint8_t value);		// write to data port
 	uint8_t ReadData();				// read status port

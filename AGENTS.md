@@ -120,8 +120,8 @@ Files in `source\VERACard\`:
   (`source\ymfm\`, BSD-3-Clause): emulates the **Yamaha YM2151** (the OPM
   interface chip on the A2VERA board; the socket can take a genuine YM2151
   or the OPM2151 FPGA replacement). Host registers are
-  `$Cs20` = `YM_REG` (register select) and `$Cs21` = `YM_DATA` (data write,
-  read = status), mirroring the X16's `$9F40`/`$9F41`. Native ~55,930 Hz
+  `$C080 + slot*$10 + 0` = `YM_SEL` (register select) and `+1` = `YM_DATA`
+  (data write / status read): Slot 2 `$C0A0/$C0A1`, Slot 4 `$C0C0/$C0C1`. Native ~55,930 Hz
   output (`kYMClock` = 3,579,545 / 64) is resampled to 44.1 kHz by
   `VERAYM::Render()` and mixed into the VERA DS voice in `UpdateSound()`.
 - `VERASD.h/.cpp` — SD/MMC SPI protocol emulation (port of apple2ts
@@ -132,11 +132,15 @@ Key integration points:
 
 - **IO region**: registers live in the Cx region `$Cs00–$CsFF` for the slot's
   bank; `addr & 0xff` selects the register. Registered via
-  `RegisterIoHandler(slot, IO_Null, IO_Null, &IOReadCx, &IOWriteCx, ...)`.
-  The FM branch in `IOReadCx`/`IOWriteCx` intercepts `addr & 0xff` `$20`/`$21`
-  *before* the video-register path, and only when `m_bFMEnabled` (default on;
+  `RegisterIoHandler(slot, &IOReadC0, &IOWriteC0, &IOReadCx, &IOWriteCx, ...)`.
+  FM uses separate `IOReadC0`/`IOWriteC0` handlers for `/DEVICE SELECT`
+  (`$C080 + slot*$10`, offsets 0/1), gated by `m_bFMEnabled` (default on;
   per-slot `REGVALUE_VERA_FM_ENABLED`, GUI checkbox in the VERA Configure
-  dialog).
+  dialog). Disabled FM and unused C0 offsets use `IO_Null`. The legacy
+  `$Cs20/$Cs21` FM interception is removed; Cx accesses always go to VERA.
+  This 2026-10-27 migration was AI-assisted. Historical guest binaries and
+  test disks using the old mapping must be rebuilt before FM playback tests.
+
 - **IRQ**: `eIRQSRC` has an `IS_VERA` value (`source\Common.h`); asserted via
   `CpuIrqAssert(IS_VERA)` / `CpuIrqDeassert(IS_VERA)`.
 - **CardManager**: single `m_pVERACard` instance, `GetVERACard()` accessor,
@@ -153,7 +157,7 @@ the chip's BUSY window:
   requests `32 * clock_prescale()` after each data write.
 - `ymfm_is_busy()` returns `m_clockCount < m_busyEnd`. **`m_clockCount` only
   advances in `Generate()`** (+64 per native sample), which runs from
-  `VERAYM::Render()` inside `UpdateSound()`. A guest that polls `$Cs21` bit 7
+  `VERAYM::Render()` inside `UpdateSound()`. A guest that polls `YM_DATA` bit 7
   therefore only sees BUSY clear while audio is being generated.
 - `VERAYM::Render(buf, numSamples)` resamples with linear interpolation
   (`m_resamplePhase`, `m_prevL/R`, `m_curL/R`) at `ratio = sampleRate / 44100`.
@@ -472,10 +476,22 @@ IIgs, only-VERA, and VERA+VidHD combinations.
     (`GetTickCount64`); if the gap exceeds ~500 ms, `DSZeroVoiceBuffer` the voice
     and re-establish a fresh lead so no stale audio survives.
 
+16. **Vertical colored stripes over the image and OSD (2026-10-27).**
+    `VERAVideo::Reset` cleared enable-history flags but left layer, sprite and
+    compositor scanline buffers uninitialized or stale. Disabled planes still
+    contribute those buffers to the compositor, so retained columns can cover
+    every scanline. Clear all five line buffers on reset and reconstruct the
+    derived layer/sprite properties from reset registers. Resetting sprite
+    attributes alone leaves old dimensions/depth, which can also cause an
+    access violation on first sprite enable. Tests 8/9 render a visible layer
+    or last-line sprite, reset, then verify every pixel of a layer-0-only white
+    frame. The old layer case left all 307,200 pixels wrong; both cases pass
+    after the fix.
+
 ## Testing
 
 - `test\VERATest\VERATest.cpp` — console smoke test of the video/audio cores
-  (13/13 checks).
+  (26 passing checks, including raster-cache reset regressions).
 - Interactive smoke test (headless): launch the Release exe with the TimePilot
   disk image, confirm the process stays alive ~15 s with steady CPU, then kill:
   ```powershell
@@ -704,6 +720,41 @@ IIgs, only-VERA, and VERA+VidHD combinations.
     RMS scan (quiet dip ~54–56 s = TITLE's first-loop boundary). Use this
     as the reference track when comparing the Apple //e zsmstream output
     ("slow motion + noise") against the X16 native playback.
+
+## Current integration and verification (2026-10-27)
+
+These changes were implemented with AI assistance under the project's human
+review policy. FM uses `/DEVICE SELECT`: Slot 2 `$C0A0/$C0A1`, Slot 4
+`$C0C0/$C0C1` (`YM_SEL` / `YM_DATA`). VERA video/SD remain at `$C200/$C400`.
+Old guest binaries using `$Cs20/$Cs21` must be rebuilt; there is no legacy FM
+alias. Disabled FM, reads of the write-only select port and unused C0 offsets
+use `IO_Null`.
+
+The matching `C:\dev\veratest` build injects `FM_BASE` for each slot and
+shares `vera_fm_detect.inc` between its assembly players and generated inline
+BASIC probes. Detection checks reserved status bits, waits for idle, writes
+`$14=$30` to clear timer flags, and requires BUSY to assert and then clear
+within a bounded wait. It does not touch the VERA address pointer.
+`veratest.po`, `slideshow.hdv` and the matching ZIP have been rebuilt; the
+user's BASIC ABOUT layout is preserved at 24 rows (maximum 39 characters,
+no final newline on the key prompt).
+
+| Check | Result |
+|---|---|
+| Release solution build, Win32 and x64 | Both pass; CPU pre-build test passes |
+| VERA core smoke suite | 26/26 checks, including two reset regression cases |
+| FM mapping runtime matrix, Win32 | 26/26 cases across slots 2/4 |
+| Additional x64 runtime smoke tests | 2/2: Slot 2 menu/probe, Slot 4 slideshow |
+| Post-reset-fix RGB/full-scanline runs | 8/8: sound demo, Sonic, slideshow; both slots and FM-off slideshow |
+| Guest ZSM/VZM stream comparison | 31,147 ticks, zero mismatches |
+
+Runtime checks used isolated INI files, save-state flags, VRAM dumps and
+nonzero WAV captures. Temporary image copies preselected menu entries;
+slideshow QA used CANYON first because SB-INTRO starts its FM arrangement
+around 114 seconds. Delivered images retain their menus and original track
+order. Sonic's floppy load needed 50M cycles rather than the initial 15M.
+These checks do not replace listening, interactive-control or physical-board
+testing. The older fmtest/veramusic evidence above predates the I/O migration.
 
 ## Conventions
 

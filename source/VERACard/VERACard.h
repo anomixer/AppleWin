@@ -36,7 +36,11 @@ public:
 	virtual void SaveSnapshot(YamlSaveHelper& yamlSaveHelper);
 	virtual bool LoadSnapshot(YamlLoadHelper& yamlLoadHelper, UINT version);
 
-	// IO handlers (Cx region: $Cs00-$CsFF)
+	// FM IO handlers (/DEVICE SELECT: $C080 + slot*$10, offsets 0 and 1)
+	static BYTE __stdcall IOReadC0(WORD pc, WORD addr, BYTE bWrite, BYTE value, ULONG nExecutedCycles);
+	static BYTE __stdcall IOWriteC0(WORD pc, WORD addr, BYTE bWrite, BYTE value, ULONG nExecutedCycles);
+
+	// VERA IO handlers (/IO SELECT: $Cs00-$CsFF)
 	static BYTE __stdcall IOReadCx(WORD pc, WORD addr, BYTE bWrite, BYTE value, ULONG nExecutedCycles);
 	static BYTE __stdcall IOWriteCx(WORD pc, WORD addr, BYTE bWrite, BYTE value, ULONG nExecutedCycles);
 
@@ -80,8 +84,8 @@ public:
 	static void SetSDWriteProtectInRegistry(UINT slot, bool wp);
 
 	// FM (YM2151) enable: gated by the "Enable FM Chip" checkbox. When false,
-	// the YM_REG/YM_DATA offsets ($Cs20/$Cs21) fall through to the normal VERA
-	// register handler, mirroring no FM hardware.
+	// the YM_SEL/YM_DATA ports ($C080 + slot*$10 + 0/1) use IO_Null,
+	// mirroring absent FM hardware.
 	void SetFMEnabled(bool enabled);
 	bool IsFMEnabled() const { return m_bFMEnabled; }
 	bool GetFMEnabledFromRegistry() const;

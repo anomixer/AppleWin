@@ -13,6 +13,10 @@ C++ 移植。
 
 ---
 
+> **2026-10-27 FM I/O 遷移（AI 輔助實作）：** FM 改用 `/DEVICE SELECT`，
+> Slot 2 為 `$C0A0/$C0A1`，Slot 4 為 `$C0C0/$C0C1`。使用舊
+> `$Cs20/$Cs21` 對映的客端程式／磁片須更新位址並重建，才能驗證 FM 播放。
+
 ## 1. 概觀
 
 - VERA 卡可插入 **Slot 2 或 Slot 4**。
@@ -41,7 +45,7 @@ C++ 移植。
 ### 2.1 IO 定址
 
 VERA 暫存器位於所選插槽的 **Cx 區域**：`$Cs00–$CsFF`，其中 `addr & 0xff`
-選定暫存器。透過 `RegisterIoHandler(slot, IO_Null, IO_Null, &IOReadCx,
+選定暫存器。透過 `RegisterIoHandler(slot, &IOReadC0, &IOWriteC0, &IOReadCx,
 &IOWriteCx, ...)` 註冊（見 `VERACard::InitializeIO`）。
 
 ### 2.2 顯示（雙螢幕設計）
@@ -234,9 +238,11 @@ registry（每 slot 區段，`REGVALUE_VERA_SD_IMAGE` = "SD Card Image"）；`Un
 
 ### FM 女兒板（YM2151）
 
-- A2VERA 板（原型硬體「EV1」版）增加一顆 Yamaha YM2151 FM 晶片，經由 VERA
-  的 Cx 區域定址：`$Cs20` = `YM_REG`（暫存器選擇）、`$Cs21` = `YM_DATA`
-  （資料寫入 / 狀態讀取），對應 X16 的 `$9F40`/`$9F41`。
+- A2VERA 板（原型硬體「EV1」版）增加一顆 Yamaha YM2151 FM 晶片，經由
+  `/DEVICE SELECT` 定址：`$C080 + slot*$10 + 0` = `YM_SEL`（暫存器選擇），
+  `+1` = `YM_DATA`（資料寫入 / 狀態讀取）。Slot 2 使用 `$C0A0/$C0A1`，
+  Slot 4 使用 `$C0C0/$C0C1`。舊的 `$Cs20/$Cs21` FM 對映已移除；
+  VERA 影像與 SD 暫存器仍使用 Cx 區域。
 - 由 `source/VERACard/VERAYM.h/.cpp` 包裝 `ymfm::ym2151` 核心（
   `source/ymfm/`，BSD-3-Clause）模擬：插座可以裝真正的 YM2151，或改用
   OPM2151（為老舊 YM2151 設計的現代 FPGA 替換件）—— 無論哪種，模擬的都是
@@ -250,9 +256,9 @@ registry（每 slot 區段，`REGVALUE_VERA_SD_IMAGE` = "SD Card Image"）；`Un
   時鐘，同一 tick 內的 key-off + key-on 會互相抵消，第一音之後的每個音都只會
   衰減。
 - 狀態暫存器會反映晶片的 BUSY 視窗（每次資料寫入後約 32 個晶片時脈 bit 7
-  為設置狀態）；客端程式必須**輪詢 `$Cs21` bit 7**。
+  為設置狀態）；客端程式必須**輪詢 `YM_DATA` bit 7**。
 - 可逐插槽啟用／停用（VERA 設定對話框的 `FM Card Enabled`，持久化到該插槽
-  的 registry）。停用時 `$Cs20`/`$Cs21` 直通一般的 VERA 暫存器處理。
+  的 registry）。停用時 FM 埠使用空插槽 I/O 行為（`IO_Null`）。
 - 已完成端到端驗證（2026-10-16）：客端程式寫入標準 init + key-on 序列後
   模擬器輸出全幅 FM 音。自動化驗證：`-fm-wav-dump` 把混合 VERA buffer 的前
   20 秒（PSG + PCM + FM 總和，立體聲 16-bit @ 44100）擷取到 exe 旁的
@@ -354,3 +360,19 @@ $msbuild = "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Curr
 - CPU 批次之間（`Update()` 約每 1 ms 一次）影片時間是一次推進的。任何
   VERA 暫存器存取都會先重新同步，所以掃描線探測看到的是即時值；但真正的
   逐週期中線光柵特效仍是近似。
+
+## 10. 驗證與直條紋修正（2026-10-27）
+
+VERA 重設現在會清空圖層、精靈及合成器的掃描線快取，並從重設後的暫存器重建
+衍生屬性，避免停用圖層的殘留像素蓋到圖片和 OSD 文字。此修正由 AI 輔助實作；
+測試 8／9 分別涵蓋已啟用的 Layer 1 與精靈跨越重設後的狀態。
+
+Win32／x64 Release solution 建置與 CPU 前置測試成功，VERA 核心測試 **26/26**
+通過。新 FM 對映的執行測試為 Win32 **26/26**、x64 **2/2**；直條紋修正後另有
+RGB／完整掃描線模式 **8/8** 通過，涵蓋兩個插槽的音效 demo、Sonic、slideshow
+及停用 FM 的 slideshow。
+
+已重建 `C:\dev\veratest\veratest.po`、`slideshow.hdv` 與對應 ZIP。BASIC 選單和
+FM 播放器共用 BUSY 偵測程式；使用者修改的 ABOUT 排版保留為 24 行、最長
+39 字元，最後提示不換行。自動測試不取代音色、互動操作與實機驗證；測試內容
+及暫存 QA 映像與交付映像的差異見 `VERAFM.md` 第 6／7 節。
